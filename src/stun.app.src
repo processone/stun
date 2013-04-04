@@ -1,0 +1,20 @@
+%%%-------------------------------------------------------------------
+%%% @author Evgeniy Khramtsov <ekhramtsov@process-one.net>
+%%% @copyright (C) 2013, Evgeniy Khramtsov
+%%% @doc
+%%%
+%%% @end
+%%% Created :  4 Apr 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
+%%%-------------------------------------------------------------------
+{application, stun,
+ [{description,  "STUN library"},
+  {vsn,          "0.1.0"},
+  {modules,      []},
+  {registered,   []},
+  {applications, [kernel, stdlib]},
+  {mod,          {stun,[]}}]}.
+
+%% Local Variables:
+%% mode: erlang
+%% End:
+%% vim: set filetype=erlang tabstop=8:
