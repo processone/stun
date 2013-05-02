@@ -12,7 +12,7 @@
   {modules,      []},
   {registered,   []},
   {applications, [kernel, stdlib]},
-  {mod,          {stun,[]}}]}.
+  {mod,          {stun_app,[]}}]}.
 
 %% Local Variables:
 %% mode: erlang

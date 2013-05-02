@@ -1,4 +1,7 @@
-all: src
+all: deps/% src
+
+deps/%:
+	rebar get-deps
 
 src:
 	rebar compile
@@ -6,4 +9,4 @@ src:
 clean:
 	rebar clean
 
-.PHONY: clean src
+.PHONY: clean src all
