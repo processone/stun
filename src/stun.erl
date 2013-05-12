@@ -40,7 +40,7 @@
 %% gen_fsm states
 -export([wait_for_tls/2, session_established/2]).
 
--include("logger.hrl").
+-include("p1_logger.hrl").
 
 -include("stun.hrl").
 
