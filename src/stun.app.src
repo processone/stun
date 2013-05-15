@@ -6,7 +6,7 @@
 %%% @end
 %%% Created :  4 Apr 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%-------------------------------------------------------------------
-{application, stun,
+{application, p1_stun,
  [{description,  "STUN library"},
   {vsn,          "0.1.0"},
   {modules,      []},
