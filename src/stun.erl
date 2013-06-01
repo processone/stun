@@ -40,37 +40,63 @@
 %% gen_fsm states
 -export([wait_for_tls/2, session_established/2]).
 
--include("p1_logger.hrl").
-
 -include("stun.hrl").
 
 -define(MAX_BUF_SIZE, 64 * 1024).
 
 -define(TIMEOUT, 10000).
 
+-define(DEFAULT_SERVER_NAME, <<"Erlang STUN library">>).
+
+-type option() :: {certfile, iodata()} | {server_name, iodata()}.
+-type options() :: [option()].
+
 -record(state,
 	{sock                  :: inet:socket() | tls:tls_socket(),
          sock_mod = gen_tcp    :: gen_udp | gen_tcp | tls,
-         certfile              :: binary(),
+         certfile              :: iodata(),
+         server_name           :: iodata(),
          peer = {{0,0,0,0}, 0} :: {inet:ip_address(), inet:port_number()},
          tref = make_ref()     :: reference(),
 	 buf = <<>>            :: binary()}).
 
+-spec start({gen_tcp, inet:socket()}, options()) ->
+                   {ok, supervisor:child()} |
+                   {ok, supervisor:child(), term()} |
+                   {error,
+                    already_present |
+                    {already_started, supervisor:child()} |
+                    term()}.
+
+%% @doc Start the STUN process serving TCP connection and attach it to the
+%% supervisor `stun_sup'.
+%% @end.
 start({gen_tcp, Sock}, Opts) ->
     supervisor:start_child(stun_sup, [Sock, Opts]).
 
+-spec start_link(inet:socket(), options()) ->
+                        {ok, pid()} |
+                        ignore |
+                        {error, {already_started, pid()} | term()}.
+
+%% @hidden
 start_link(Sock, Opts) ->
     gen_fsm:start_link(?MODULE, [Sock, Opts], []).
 
+%% @private
 socket_type() -> raw.
 
-udp_recv(Sock, Addr, Port, Data, _Opts) ->
+-spec udp_recv(inet:socket(), inet:ip_address(), inet:port_number(),
+               iodata(), options()) -> ok.
+
+%% @doc Process the STUN message received via UDP socket `Sock'
+%% from address `Addr' and port `Port'.
+%% @end
+udp_recv(Sock, Addr, Port, Data, Opts) ->
     case stun_codec:decode(Data) of
       {ok, Msg, <<>>} ->
-	  ?DEBUG("got:~n~p", [Msg]),
-	  case process(Addr, Port, Msg) of
+	  case process(Addr, Port, Msg, Opts) of
 	    RespMsg when is_record(RespMsg, stun) ->
-		?DEBUG("sent:~n~p", [RespMsg]),
 		Data1 = stun_codec:encode(RespMsg),
 		gen_udp:send(Sock, Addr, Port, Data1);
 	    _ -> ok
@@ -78,48 +104,56 @@ udp_recv(Sock, Addr, Port, Data, _Opts) ->
       _ -> ok
     end.
 
+%% @private
 init([Sock, Opts]) ->
     case inet:peername(Sock) of
       {ok, Addr} ->
 	  inet:setopts(Sock, [{active, once}]),
 	  TRef = erlang:start_timer(?TIMEOUT, self(), stop),
 	  State = #state{sock = Sock, peer = Addr, tref = TRef},
+          ServerName = proplists:get_value(
+                         server_name, Opts, ?DEFAULT_SERVER_NAME),
 	  case proplists:get_value(certfile, Opts) of
 	    undefined -> {ok, session_established, State};
 	    CertFile ->
-		{ok, wait_for_tls, State#state{certfile = CertFile}}
+		{ok, wait_for_tls, State#state{certfile = CertFile,
+                                               server_name = ServerName}}
 	  end;
       Err -> Err
     end.
 
+%% @private
 wait_for_tls(Event, State) ->
-    ?INFO_MSG("unexpected event in wait_for_tls: ~p",
-	      [Event]),
+    error_logger:error_msg("unexpected event in wait_for_tls: ~p~n",
+                           [Event]),
     {next_state, wait_for_tls, State}.
 
+%% @private
 session_established(Msg, State)
     when is_record(Msg, stun) ->
-    ?DEBUG("got:~n~p", [Msg]),
     {Addr, Port} = State#state.peer,
-    case process(Addr, Port, Msg) of
+    case process(Addr, Port, Msg,
+                 [{server_name, State#state.server_name}]) of
       Resp when is_record(Resp, stun) ->
-	  ?DEBUG("sent:~n~p", [Resp]),
 	  Data = stun_codec:encode(Resp),
 	  (State#state.sock_mod):send(State#state.sock, Data);
       _ -> ok
     end,
     {next_state, session_established, State};
 session_established(Event, State) ->
-    ?INFO_MSG("unexpected event in session_established: ~p",
-	      [Event]),
+    error_logger:error_msg("unexpected event in session_established: ~p~n",
+                           [Event]),
     {next_state, session_established, State}.
 
+%% @private
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
+%% @private
 handle_sync_event(_Event, _From, StateName, State) ->
     {reply, {error, badarg}, StateName, State}.
 
+%% @private
 handle_info({tcp, Sock, TLSData}, wait_for_tls,
 	    State) ->
     Buf = <<(State#state.buf)/binary, TLSData/binary>>,
@@ -148,29 +182,29 @@ handle_info({tcp, _Sock, TLSData}, StateName,
 handle_info({tcp, _Sock, Data}, StateName, State) ->
     process_data(StateName, State, Data);
 handle_info({tcp_closed, _Sock}, _StateName, State) ->
-    ?DEBUG("connection reset by peer", []),
     {stop, normal, State};
-handle_info({tcp_error, _Sock, Reason}, _StateName,
+handle_info({tcp_error, _Sock, _Reason}, _StateName,
 	    State) ->
-    ?DEBUG("connection error: ~p", [Reason]),
     {stop, normal, State};
 handle_info({timeout, TRef, stop}, _StateName,
 	    #state{tref = TRef} = State) ->
     {stop, normal, State};
-handle_info(Info, StateName, State) ->
-    ?INFO_MSG("unexpected info: ~p", [Info]),
+handle_info(_Info, StateName, State) ->
     {next_state, StateName, State}.
 
+%% @private
 terminate(_Reason, _StateName, State) ->
     catch (State#state.sock_mod):close(State#state.sock),
     ok.
 
+%% @private
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
 
+%% @private
 process(Addr, Port,
-	#stun{class = request, unsupported = []} = Msg) ->
-    Resp = prepare_response(Msg),
+	#stun{class = request, unsupported = []} = Msg, Opts) ->
+    Resp = prepare_response(Msg, Opts),
     if Msg#stun.method == (?STUN_METHOD_BINDING) ->
 	   case stun_codec:version(Msg) of
 	     old ->
@@ -184,19 +218,20 @@ process(Addr, Port,
 	   Resp#stun{class = error,
 		     'ERROR-CODE' = {405, <<"Method Not Allowed">>}}
     end;
-process(_Addr, _Port, #stun{class = request} = Msg) ->
-    Resp = prepare_response(Msg),
+process(_Addr, _Port, #stun{class = request} = Msg, Opts) ->
+    Resp = prepare_response(Msg, Opts),
     Resp#stun{class = error,
 	      'UNKNOWN-ATTRIBUTES' = Msg#stun.unsupported,
 	      'ERROR-CODE' = {420, stun_codec:reason(420)}};
-process(_Addr, _Port, _Msg) -> pass.
+process(_Addr, _Port, _Msg, _Opts) -> pass.
 
-prepare_response(Msg) ->
-    %% TODO: respond with correct version
-    Version = <<"Erlang STUN library">>,
+%% @private
+prepare_response(Msg, Opts) ->
+    Version = proplists:get_value(server_name, Opts, <<"Erlang STUN library">>),
     #stun{method = Msg#stun.method, magic = Msg#stun.magic,
 	  trid = Msg#stun.trid, 'SOFTWARE' = Version}.
 
+%% @private
 process_data(NextStateName, #state{buf = Buf} = State,
 	     Data) ->
     NewBuf = <<Buf/binary, Data/binary>>,
@@ -214,6 +249,7 @@ process_data(NextStateName, #state{buf = Buf} = State,
       _ -> {stop, normal, State}
     end.
 
+%% @private
 update_state(#state{sock = Sock} = State) ->
     case State#state.sock_mod of
       gen_tcp -> inet:setopts(Sock, [{active, once}]);
@@ -223,6 +259,7 @@ update_state(#state{sock = Sock} = State) ->
     TRef = erlang:start_timer(?TIMEOUT, self(), stop),
     State#state{tref = TRef}.
 
+%% @private
 cancel_timer(TRef) ->
     case erlang:cancel_timer(TRef) of
       false ->

@@ -9,4 +9,7 @@ src:
 clean:
 	rebar clean
 
-.PHONY: clean src all
+doc:
+	rebar skip_deps=true doc
+
+.PHONY: clean src all doc
