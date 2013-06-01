@@ -34,7 +34,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-    application:start(tls),
+    application:start(p1_tls),
     case stun_sup:start_link() of
         {ok, Pid} ->
             {ok, Pid};
