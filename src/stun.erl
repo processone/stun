@@ -52,8 +52,8 @@
 -type options() :: [option()].
 
 -record(state,
-	{sock                  :: inet:socket() | tls:tls_socket(),
-         sock_mod = gen_tcp    :: gen_udp | gen_tcp | tls,
+	{sock                  :: inet:socket() | p1_tls:tls_socket(),
+         sock_mod = gen_tcp    :: gen_udp | gen_tcp | p1_tls,
          certfile              :: iodata(),
          server_name           :: iodata(),
          peer = {{0,0,0,0}, 0} :: {inet:ip_address(), inet:port_number()},
@@ -163,10 +163,10 @@ handle_info({tcp, Sock, TLSData}, wait_for_tls,
 	   update_state(State#state{buf = Buf})};
       <<_:16, 1, _/binary>> ->
 	  TLSOpts = [{certfile, State#state.certfile}],
-	  {ok, TLSSock} = tls:tcp_to_tls(Sock, TLSOpts),
+	  {ok, TLSSock} = p1_tls:tcp_to_tls(Sock, TLSOpts),
 	  NewState = State#state{sock = TLSSock, buf = <<>>,
-				 sock_mod = tls},
-	  case tls:recv_data(TLSSock, Buf) of
+				 sock_mod = p1_tls},
+	  case p1_tls:recv_data(TLSSock, Buf) of
 	    {ok, Data} ->
 		process_data(session_established, NewState, Data);
 	    _Err -> {stop, normal, NewState}
@@ -174,8 +174,8 @@ handle_info({tcp, Sock, TLSData}, wait_for_tls,
       _ -> process_data(session_established, State, TLSData)
     end;
 handle_info({tcp, _Sock, TLSData}, StateName,
-	    #state{sock_mod = tls} = State) ->
-    case tls:recv_data(State#state.sock, TLSData) of
+	    #state{sock_mod = p1_tls} = State) ->
+    case p1_tls:recv_data(State#state.sock, TLSData) of
       {ok, Data} -> process_data(StateName, State, Data);
       _Err -> {stop, normal, State}
     end;
