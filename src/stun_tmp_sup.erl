@@ -4,9 +4,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created :  2 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
+%%% Created :  3 May 2014 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%-------------------------------------------------------------------
--module(stun_sup).
+-module(stun_tmp_sup).
 
 -behaviour(supervisor).
 
@@ -50,13 +50,9 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    StunTmpSup = {stun_tmp_sup, {stun_tmp_sup, start_link, []},
-		  permanent, infinity, supervisor, [stun_tmp_sup]},
-    TurnTmpSup = {turn_tmp_sup, {turn_tmp_sup, start_link, []},
-		  permanent, infinity, supervisor, [turn_tmp_sup]},
-    TurnSM = {turn_sm, {turn_sm, start_link, []},
-	      permanent, 2000, worker, [turn_sm]},
-    {ok, {{one_for_one, 10, 1}, [TurnSM, StunTmpSup, TurnTmpSup]}}.
+    {ok, {{simple_one_for_one, 10, 1},
+          [{undefined, {stun, start_link, []},
+            temporary, brutal_kill, worker, [stun]}]}}.
 
 %%%===================================================================
 %%% Internal functions
