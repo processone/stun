@@ -34,6 +34,7 @@
 	 start/2,
 	 stop/1,
 	 socket_type/0,
+	 tcp_init/2,
 	 udp_init/2,
 	 udp_recv/5]).
 
@@ -46,8 +47,7 @@
 	 code_change/4]).
 
 %% gen_fsm states
--export([wait_for_tls/2,
-	 session_established/2]).
+-export([session_established/2]).
 
 -include("stun.hrl").
 
@@ -76,10 +76,10 @@
 	 relay_ip = {127,0,0,1}      :: inet:ip_address(),
 	 port_range = {49152, 65535} :: port_range(),
 	 max_allocs = unlimited      :: non_neg_integer() | unlimited,
-	 shaper = none               :: shaper:shaper(),
+	 shaper = none               :: stun_shaper:shaper(),
 	 max_permissions = unlimited :: non_neg_integer() | unlimited,
 	 auth = [user]               :: [anonymous | user],
-	 nonces = treap:empty()      :: treap:treap(),
+	 nonces = stun_treap:empty() :: stun_treap:treap(),
 	 realm = <<"">>              :: binary(),
 	 get_pass_f                  :: function(),
 	 server_name = <<"">>        :: binary(),
@@ -100,6 +100,9 @@ start_link(Sock, Opts) ->
 socket_type() ->
     raw.
 
+tcp_init(_Sock, Opts) ->
+    Opts.
+
 udp_init(Sock, Opts) ->
     prepare_state(Opts, Sock, {{0,0,0,0}, 0}, gen_udp).
 
@@ -119,23 +122,21 @@ udp_recv(Sock, Addr, Port, Data, State) ->
 init([Sock, Opts]) ->
     case inet:peername(Sock) of
 	{ok, Addr} ->
-	    inet:setopts(Sock, [{active, once}]),
 	    TRef = erlang:start_timer(?TIMEOUT, self(), stop),
-	    State = prepare_state(Opts, Sock, Addr, gen_tcp),
-	    case proplists:get_value(certfile, Opts) of
-		undefined ->
-		    {ok, session_established, State#state{tref = TRef}};
-		CertFile ->
-		    {ok, wait_for_tls,
-		     State#state{certfile = CertFile, tref = TRef}}
+	    SockMod = get_sockmod(Opts),
+	    State = prepare_state(Opts, Sock, Addr, SockMod),
+	    CertFile = get_certfile(Opts),
+	    case maybe_starttls(Sock, SockMod, CertFile, Addr) of
+		{ok, NewSock} ->
+		    inet:setopts(Sock, [{active, once}]),
+		    {ok, session_established,
+		     State#state{tref = TRef, sock = NewSock}};
+		{error, Why} ->
+		    {stop, Why}
 	    end;
 	Err ->
 	    Err
     end.
-
-wait_for_tls(Event, State) ->
-    error_logger:error_msg("unexpected event in wait_for_tls: ~p", [Event]),
-    {next_state, wait_for_tls, State}.
 
 session_established(Event, State) ->
     error_logger:error_msg("unexpected event in session_established: ~p", [Event]),
@@ -149,32 +150,10 @@ handle_event(_Event, StateName, State) ->
 handle_sync_event(_Event, _From, StateName, State) ->
     {reply, {error, badarg}, StateName, State}.
 
-handle_info({tcp, Sock, TLSData}, wait_for_tls, State) ->
-    NewState = update_shaper(State, TLSData),
-    Buf = <<(NewState#state.buf)/binary, TLSData/binary>>,
-    %% Check if the initial message is a TLS handshake
-    case Buf of
-	_ when size(Buf) < 3 ->
-	    {next_state, wait_for_tls, NewState#state{buf = Buf}};
-	<<_:16, 1, _/binary>> ->
-	    TLSOpts = [{certfile, NewState#state.certfile}],
-	    {ok, TLSSock} = tls:tcp_to_tls(Sock, TLSOpts),
-	    NewState1 = NewState#state{sock = TLSSock,
-				      buf = <<>>,
-				      sock_mod = tls},
-	    case tls:recv_data(TLSSock, Buf) of
-		{ok, Data} ->
-		    process_data(session_established, NewState1, Data);
-		_Err ->
-		    {stop, normal, NewState1}
-	    end;
-	_ ->
-	    process_data(session_established, NewState, TLSData)
-    end;
 handle_info({tcp, _Sock, TLSData}, StateName,
-	    #state{sock_mod = tls} = State) ->
+	    #state{sock_mod = p1_tls} = State) ->
     NewState = update_shaper(State, TLSData),
-    case tls:recv_data(NewState#state.sock, TLSData) of
+    case p1_tls:recv_data(NewState#state.sock, TLSData) of
 	{ok, Data} ->
 	    process_data(StateName, NewState, Data);
 	_Err ->
@@ -412,11 +391,11 @@ process_data(NextStateName, #state{buf = Buf} = State, Data) ->
     end.
 
 update_shaper(#state{shaper = Shaper} = State, Data) ->
-    {NewShaper, Pause} = shaper:update(Shaper, size(Data)),
+    {NewShaper, Pause} = stun_shaper:update(Shaper, size(Data)),
     if Pause > 0 ->
-	    erlang:start_timer(Pause, self(), activate);
+    	    erlang:start_timer(Pause, self(), activate);
        true ->
-	    activate_socket(State)
+    	    activate_socket(State)
     end,
     State#state{shaper = NewShaper}.
 
@@ -471,15 +450,15 @@ route_on_turn(State, Msg, Pass) ->
     end.
 
 prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
-    case gen_mod:get_opt(use_turn, Opts, false) of
+    case proplists:get_bool(use_turn, Opts) of
 	true ->
 	    IP = get_turn_ip(Opts),
 	    PortRange = get_port_range(Opts),
-	    MaxAllocs = gen_mod:get_opt(turn_max_allocations, Opts, unlimited),
-	    MaxPerms = gen_mod:get_opt(turn_max_permissions, Opts, unlimited),
-	    Shaper = gen_mod:get_opt(shaper, Opts, none),
-	    Realm = gen_mod:get_opt(realm, Opts, <<"localhost">>),
-	    Auth = case gen_mod:get_opt(turn_auth, Opts, [jid]) of
+	    MaxAllocs = proplists:get_value(turn_max_allocations, Opts, unlimited),
+	    MaxPerms = proplists:get_value(turn_max_permissions, Opts, unlimited),
+	    Shaper = proplists:get_value(shaper, Opts, none),
+	    Realm = proplists:get_value(realm, Opts, <<"localhost">>),
+	    Auth = case proplists:get_value(auth, Opts, [jid]) of
 		       L when is_list(L) ->
 			   case lists:filter(
 				  fun(anonymous) -> true;
@@ -509,7 +488,7 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		   sock = Sock,
 		   auth = Auth,
 		   realm = Realm,
-		   shaper = shaper:new(Shaper),
+		   shaper = stun_shaper:new(Shaper),
 		   sock_mod = SockMod,
 		   peer = Peer};
 	_ ->
@@ -576,13 +555,13 @@ now_priority() ->
     -((MSec*1000000 + Sec)*1000000 + USec).
 
 clean_treap(Treap, CleanPriority) ->
-    case treap:is_empty(Treap) of
+    case stun_treap:is_empty(Treap) of
 	true ->
 	    Treap;
 	false ->
-	    {_Key, Priority, _Value} = treap:get_root(Treap),
+	    {_Key, Priority, _Value} = stun_treap:get_root(Treap),
 	    if Priority > CleanPriority ->
-		    clean_treap(treap:delete_root(Treap), CleanPriority);
+		    clean_treap(stun_treap:delete_root(Treap), CleanPriority);
 	       true ->
 		    Treap
 	    end
@@ -592,12 +571,12 @@ make_nonce(Addr, Nonces) ->
     Priority = now_priority(),
     Nonce = randoms:get_string(),
     NewNonces = clean_treap(Nonces, Priority + ?NONCE_LIFETIME),
-    {Nonce, treap:insert(Nonce, Priority, Addr, NewNonces)}.
+    {Nonce, stun_treap:insert(Nonce, Priority, Addr, NewNonces)}.
 
 have_nonce(Nonce, Nonces) ->
     Priority = now_priority(),
     NewNonces = clean_treap(Nonces, Priority + ?NONCE_LIFETIME),
-    case treap:lookup(Nonce, NewNonces) of
+    case stun_treap:lookup(Nonce, NewNonces) of
 	{ok, _, _} ->
 	    {true, NewNonces};
 	_ ->
@@ -608,6 +587,32 @@ addr_to_str({Addr, Port}) ->
     [inet_parse:ntoa(Addr), $:, integer_to_list(Port)];
 addr_to_str(Addr) ->
     inet_parse:ntoa(Addr).
+
+get_sockmod(Opts) ->
+    case proplists:get_bool(tls, Opts) of
+	true ->
+	    p1_tls;
+	false ->
+	    gen_tcp
+    end.
+
+get_certfile(Opts) ->
+    case catch iolist_to_binary(proplists:get_value(certfile, Opts)) of
+	Filename when is_binary(Filename), Filename /= <<"">> ->
+	    Filename;
+	_ ->
+	    undefined
+    end.
+
+maybe_starttls(_Sock, p1_tls, undefined, {IP, Port}) ->
+    error_logger:error_msg("failed to start TLS connection for ~s:~p: "
+			   "option 'certfile' is not set",
+			   [inet_parse:ntoa(IP), Port]),
+    {error, eprotonosupport};
+maybe_starttls(Sock, p1_tls, CertFile, _PeerAddr) ->
+    p1_tls:tcp_to_tls(Sock, [{certfile, CertFile}]);
+maybe_starttls(Sock, gen_tcp, _CertFile, _PeerAddr) ->
+    {ok, Sock}.
 
 prepare_response(State, Msg) ->
     #stun{method = Msg#stun.method,

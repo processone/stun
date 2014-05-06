@@ -12,4 +12,7 @@ clean:
 doc:
 	rebar skip_deps=true doc
 
-.PHONY: clean src all doc
+test: all
+	rebar -v skip_deps=true eunit
+
+.PHONY: clean src all doc rebar
