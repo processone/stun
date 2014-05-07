@@ -545,6 +545,10 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		      State;
 		 (use_turn, State) ->
 		      State;
+		 (inet, State) ->
+		      State;
+		 ({ip, _}, State) ->
+		      State;
 		 (Opt, State) ->
 		      error_logger:error_msg(
 			"ignoring unknown option ~p", [Opt]),
