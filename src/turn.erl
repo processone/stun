@@ -53,24 +53,29 @@
 -define(CHANNEL_LIFETIME, 600000). %% 10 minutes
 -define(DICT, dict).
 
--record(state, {sock_mod,
-		sock,
-		addr,
-		owner,
-		username,
-		realm,
-		key,
-		permissions = ?DICT:new(),
-		channels = ?DICT:new(),
-		max_permissions,
-		relay_ip,
-		port_range,
-		relay_addr,
-		relay_sock,
-		last_trid,
-		last_pkt,
-		seq = 1,
-		life_timer}).
+-type addr() :: {inet:ip_address(), inet:port_number()}.
+-type port_range() :: {inet:port_number(), inet:port_number()}.
+
+-record(state,
+	{sock_mod = gen_udp             :: gen_udp | gen_tcp | p1_tls,
+	 sock                           :: inet:socket() | p1_tls:tls_socket(),
+	 addr = {{0,0,0,0}, 0}          :: addr(),
+	 owner = self()                 :: pid(),
+	 username = <<"">>              :: binary(),
+	 realm = <<"">>                 :: binary(),
+	 key = {<<"">>, <<"">>, <<"">>} :: {binary(), binary(), binary()},
+	 server_name = <<"">>           :: binary(),
+	 permissions = ?DICT:new()      :: dict(),
+	 channels = ?DICT:new()         :: dict(),
+	 max_permissions                :: non_neg_integer() | atom(),
+	 relay_ip = {127,0,0,1}         :: inet:ip_address(),
+	 port_range = {49152, 65535}    :: port_range(),
+	 relay_addr                     :: addr(),
+	 relay_sock                     :: inet:socket(),
+	 last_trid                      :: non_neg_integer(),
+	 last_pkt = <<>>                :: binary(),
+	 seq = 1                        :: non_neg_integer(),
+	 life_timer                     :: reference()}).
 
 %%====================================================================
 %% API
@@ -101,6 +106,7 @@ init([Opts]) ->
 		   relay_ip = proplists:get_value(relay_ip, Opts),
 		   port_range = proplists:get_value(port_range, Opts),
 		   max_permissions = proplists:get_value(max_permissions, Opts),
+		   server_name = proplists:get_value(server_name, Opts),
 		   realm = Realm, addr = AddrPort,
 		   username = Username, owner = Owner},
     MaxAllocs = proplists:get_value(max_allocs, Opts),
@@ -122,7 +128,7 @@ init([Opts]) ->
 wait_for_allocate(#stun{class = request,
 			method = ?STUN_METHOD_ALLOCATE} = Msg,
 		  State) ->
-    Resp = stun_codec:prepare_response(Msg),
+    Resp = prepare_response(State, Msg),
     if Msg#stun.'REQUESTED-TRANSPORT' == undefined ->
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
@@ -143,7 +149,7 @@ wait_for_allocate(#stun{class = request,
 		    AddrPort = State#state.addr,
 		    RelayAddr = {State#state.relay_ip, RelayPort},
 		    error_logger:info_msg(
-		       "created TURN allocation for ~s@~s: ~s <-> ~s",
+		       "created TURN allocation for ~s@~s from ~s: ~s",
 		       [State#state.username, State#state.realm,
 			addr_to_str(AddrPort), addr_to_str(RelayAddr)]),
 		    R = Resp#stun{class = response,
@@ -173,13 +179,13 @@ active(#stun{trid = TrID}, #state{last_trid = TrID} = State) ->
     {next_state, active, State};
 active(#stun{class = request,
 	     method = ?STUN_METHOD_ALLOCATE} = Msg, State) ->
-    Resp = stun_codec:prepare_response(Msg),
+    Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(437)},
     {next_state, active, send(State, R)};
 active(#stun{class = request,
 	     method = ?STUN_METHOD_REFRESH} = Msg, State) ->
-    Resp = stun_codec:prepare_response(Msg),
+    Resp = prepare_response(State, Msg),
     case Msg#stun.'LIFETIME' of
 	0 ->
 	    R = Resp#stun{class = response, 'LIFETIME' = 0},
@@ -199,7 +205,7 @@ active(#stun{class = request,
 active(#stun{class = request,
 	     'XOR-PEER-ADDRESS' = XorPeerAddrs,
 	     method = ?STUN_METHOD_CREATE_PERMISSION} = Msg, State) ->
-    Resp = stun_codec:prepare_response(Msg),
+    Resp = prepare_response(State, Msg),
     PermLen = ?DICT:size(State#state.permissions) + length(XorPeerAddrs),
     if XorPeerAddrs == [] ->
 	    R = Resp#stun{class = error,
@@ -218,6 +224,13 @@ active(#stun{class = request,
 			      TRef = erlang:start_timer(
 				       ?PERMISSION_LIFETIME, self(),
 				       {permission_timeout, Addr}),
+			      error_logger:info_msg(
+				"created/updated TURN permission for user "
+				"~s@~s from ~s: ~s <-> ~s",
+				[State#state.username, State#state.realm,
+				 addr_to_str(State#state.addr),
+				 addr_to_str(State#state.relay_addr),
+				 addr_to_str({Addr, _Port})]),
 			      ?DICT:store(Addr, {Channel, TRef}, Acc)
 		      end, State#state.permissions, XorPeerAddrs),
 	    NewState = State#state{permissions = Perms},
@@ -244,7 +257,7 @@ active(#stun{class = request,
 	     'XOR-PEER-ADDRESS' = [{Addr, Port}],
 	     method = ?STUN_METHOD_CHANNEL_BIND} = Msg, State)
   when is_integer(Channel), Channel >= 16#4000, Channel =< 16#7ffe ->
-    Resp = stun_codec:prepare_response(Msg),
+    Resp = prepare_response(State, Msg),
     AddrPort = {Addr, Port},
     case ?DICT:find(Channel, State#state.channels) of
 	{ok, {AddrPort, OldTRef}} ->
@@ -278,7 +291,7 @@ active(#stun{class = request,
     end;
 active(#stun{class = request,
 	     method = ?STUN_METHOD_CHANNEL_BIND} = Msg, State) ->
-    Resp = stun_codec:prepare_response(Msg),
+    Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(400)},
     {next_state, active, send(State, R)};
@@ -374,10 +387,14 @@ terminate(_Reason, _StateName, State) ->
 	    ok;
 	RAddrPort ->
 	    error_logger:info_msg(
-	      "deleting TURN allocation for ~s@~s: ~s <-> ~s",
+	      "deleting TURN allocation for ~s@~s from ~s: ~s",
 	      [Username, Realm, addr_to_str(AddrPort), addr_to_str(RAddrPort)])
     end,
-    stun:stop(State#state.owner),
+    if is_pid(State#state.owner) ->
+	    stun:stop(State#state.owner);
+       true ->
+	    ok
+    end,
     turn_sm:del_allocation(AddrPort, Username, Realm).
 
 code_change(_OldVsn, StateName, State, _Extra) ->
@@ -473,3 +490,9 @@ cancel_timer(TRef) ->
         _ ->
             ok
     end.
+
+prepare_response(State, Msg) ->
+    #stun{method = Msg#stun.method,
+	  magic = Msg#stun.magic,
+	  trid = Msg#stun.trid,
+	  'SOFTWARE' = State#state.server_name}.

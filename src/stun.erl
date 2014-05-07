@@ -54,7 +54,7 @@
 -define(MAX_BUF_SIZE, 64*1024). %% 64kb
 -define(TIMEOUT, 60000). %% 1 minute
 -define(NONCE_LIFETIME, 60*1000*1000). %% 1 minute (in usec)
--define(DEFAULT_SERVER_NAME, <<"Erlang STUN library">>).
+-define(SERVER_NAME, <<"P1 STUN library">>).
 
 %%-define(debug, true).
 -ifdef(debug).
@@ -81,8 +81,8 @@
 	 auth = [user]               :: [anonymous | user],
 	 nonces = stun_treap:empty() :: stun_treap:treap(),
 	 realm = <<"">>              :: binary(),
-	 get_pass_f                  :: function(),
-	 server_name = <<"">>        :: binary(),
+	 auth_fun                    :: function(),
+	 server_name = ?SERVER_NAME  :: binary(),
 	 buf = <<>>                  :: binary()}).
 
 %%====================================================================
@@ -104,6 +104,8 @@ tcp_init(_Sock, Opts) ->
     Opts.
 
 udp_init(Sock, Opts) ->
+    {A, B, C} = now(),
+    random:seed(A, B, C),
     prepare_state(Opts, Sock, {{0,0,0,0}, 0}, gen_udp).
 
 udp_recv(Sock, Addr, Port, Data, State) ->
@@ -234,7 +236,7 @@ process(State, #stun{class = request,
 				  'ERROR-CODE' = stun_codec:error(401),
 				  'REALM' = State#state.realm,
 				  'NONCE' = Nonce},
-		    case (State#state.get_pass_f)(User, Realm) of
+		    case (State#state.auth_fun)(User, Realm) of
 			<<"">> ->
 			    error_logger:info_msg(
 			      "failed long-term STUN authentication "
@@ -326,6 +328,7 @@ process(State, #stun{class = request,
 		    {username, Msg#stun.'USERNAME'},
 		    {realm, State#state.realm},
 		    {key, Secret},
+		    {server, State#state.server_name},
 		    {max_allocs, State#state.max_allocs},
 		    {max_permissions, State#state.max_permissions},
 		    {addr, AddrPort},
@@ -452,79 +455,119 @@ route_on_turn(State, Msg, Pass) ->
 prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
     case proplists:get_bool(use_turn, Opts) of
 	true ->
-	    IP = get_turn_ip(Opts),
-	    PortRange = get_port_range(Opts),
-	    MaxAllocs = proplists:get_value(turn_max_allocations, Opts, unlimited),
-	    MaxPerms = proplists:get_value(turn_max_permissions, Opts, unlimited),
-	    Shaper = proplists:get_value(shaper, Opts, none),
-	    Realm = proplists:get_value(realm, Opts, <<"localhost">>),
-	    Auth = case proplists:get_value(auth, Opts, [jid]) of
-		       L when is_list(L) ->
-			   case lists:filter(
-				  fun(anonymous) -> true;
-				     (user) -> true;
-				     (_) -> false
-				  end, L) of
-			       [] ->
-				   error_logger:error_msg(
-				     "no valid authentication "
-				     "types found, using [user] "
-				     "as fallback", []),
-				   [user];
-			       L1 ->
-				   L1
-			   end;
-		       Bad ->
-			   error_logger:error_msg(
-			     "wrong turn_auth type ~p, "
-			     "using [user] as fallback", [Bad]),
-			   [user]
-		   end,
-	    #state{use_turn = true,
-		   relay_ip = IP,
-		   port_range = PortRange,
-		   max_allocs = MaxAllocs,
-		   max_permissions = MaxPerms,
-		   sock = Sock,
-		   auth = Auth,
-		   realm = Realm,
-		   shaper = stun_shaper:new(Shaper),
-		   sock_mod = SockMod,
-		   peer = Peer};
+	    lists:foldl(
+	      fun({turn_ip, IP}, State) ->
+		      case prepare_addr(IP) of
+			  {ok, Addr} ->
+			      State#state{relay_ip = Addr};
+			  {error, _} ->
+			      error_logger:error_msg("wrong 'turn_ip' "
+						     "value: ~p", [IP]),
+			      State
+		      end;
+		 ({turn_port_range, Min, Max}, State)
+		    when 1024 < Min, Min < Max, Max < 65536 ->
+		      State#state{port_range = {Min, Max}};
+		 ({turn_port_range, Min, Max}, State) ->
+		      error_logger:error_msg("invalid 'turn_port_range' ~p-~p, "
+					     "using 49152-65535 as fallback",
+					     [Min, Max]),
+		      State;
+		 ({turn_max_allocations, N}, State)
+		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
+		      State#state{max_allocs = N};
+		 ({turn_max_allocations, Wrong}, State) ->
+		      error_logger:error_msg("wrong 'turn_max_allocations' "
+					     "value: ~p", [Wrong]),
+		      State;
+		 ({turn_max_permissions, N}, State)
+		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
+		      State#state{max_permissions = N};
+		 ({turn_max_permissions, Wrong}, State) ->
+		      error_logger:error_msg("wrong 'turn_max_permissions' "
+					     "value: ~p", [Wrong]),
+		      State;
+		 ({shaper, S}, State)
+		    when S == none orelse (is_integer(S) andalso (S > 0)) ->
+		      State#state{shaper = stun_shaper:new(S)};
+		 ({shaper, Wrong}, State) ->
+		      error_logger:error_msg("wrong 'shaper' "
+					     "value: ~p", [Wrong]),
+		      State;
+		 ({server_name, S}, State) ->
+		      try
+			  State#state{server_name = iolist_to_binary(S)}
+		      catch _:_ ->
+			      error_logger:error_msg("wrong 'server_name' "
+						     "value: ~p", [S]),
+			      State
+		      end;
+		 ({realm, R}, State) ->
+		      try
+			  State#state{realm = iolist_to_binary(R)}
+		      catch _:_ ->
+			      error_logger:error_msg("wrong 'realm' "
+						     "value: ~p", [R]),
+			      State
+		      end;
+		 ({auth_fun, F}, State) when is_function(F) ->
+		      State#state{auth_fun = F};
+		 ({auth_fun, Wrong}, State) ->
+		      error_logger:error_msg("wrong 'auth_fun' "
+					     "value: ~p", [Wrong]),
+		      State;
+		 ({auth, Auth}, State) when is_list(Auth) ->
+		      {ValidAuth, WrongAuth} = lists:partition(
+						 fun(anonymous) -> true;
+						    (user) -> true;
+						    (_) -> false
+						 end, Auth),
+		      case WrongAuth of
+			  [_|_] ->
+			      error_logger:error_msg(
+				"ignoring unknown auth types: ~p",
+				[WrongAuth]);
+			  _ ->
+			      ok
+		      end,
+		      case ValidAuth of
+			  [] ->
+			      error_logger:error_msg("empty 'auth' value", []),
+			      State;
+			  _ ->
+			      State#state{auth = ValidAuth}
+		      end;
+		 ({auth, Wrong}, State) ->
+		      error_logger:error_msg("wrong 'auth' "
+					     "value: ~p", [Wrong]),
+		      State;
+		 ({use_turn, _}, State) ->
+		      State;
+		 (use_turn, State) ->
+		      State;
+		 (Opt, State) ->
+		      error_logger:error_msg(
+			"ignoring unknown option ~p", [Opt]),
+		      State
+	      end,
+	      #state{peer = Peer, sock = Sock,
+		     sock_mod = SockMod, use_turn = true},
+	      Opts);
 	_ ->
 	    #state{sock = Sock, sock_mod = SockMod, peer = Peer}
     end;
 prepare_state(State, _Sock, Peer, _SockMod) ->
     State#state{peer = Peer}.
 
-get_turn_ip(Opts) ->
-    case proplists:get_value(turn_ip, Opts) of
-	IPS when is_list(IPS) ->
-	    {ok, Addr} = inet_parse:address(IPS),
-	    Addr;
-	Addr when is_tuple(Addr) ->
-	    Addr;
-	undefined ->
-	    case inet:getif() of
-		{ok, [{Addr, _BCast, _Mask}|_]} ->
-		    Addr;
-		_ ->
-		    error_logger:error_msg("could not detect turn_ip, "
-					   "using 127.0.0.1 as fallback", []),
-		    {127,0,0,1}
-	    end
-    end.
-
-get_port_range(Opts) ->
-    case lists:keysearch(turn_port_range, 1, Opts) of
-	{value, {_, Min, Max}} when 1024 < Min, Min < Max, Max < 65536 ->
-	    {Min, Max};
-	{value, _} ->
-	    error_logger:error_msg("invalid turn_port_range, "
-				   "using 49152-65535 as fallback", []),
-	    {49152, 65535};
-	_ ->
-	    {49152, 65535}
+prepare_addr(IPBin) when is_binary(IPBin) ->
+    prepare_addr(binary_to_list(IPBin));
+prepare_addr(IPS) when is_list(IPS) ->
+    inet_parse:address(IPS);
+prepare_addr(T) when is_tuple(T) ->
+    try
+	inet_parse:address(inet_parse:ntoa(T))
+    catch _:_ ->
+	    {error, einval}
     end.
 
 activate_socket(#state{sock = Sock, sock_mod = SockMod}) ->
@@ -569,7 +612,7 @@ clean_treap(Treap, CleanPriority) ->
 
 make_nonce(Addr, Nonces) ->
     Priority = now_priority(),
-    Nonce = randoms:get_string(),
+    Nonce = erlang:integer_to_binary(random:uniform(1 bsl 32)),
     NewNonces = clean_treap(Nonces, Priority + ?NONCE_LIFETIME),
     {Nonce, stun_treap:insert(Nonce, Priority, Addr, NewNonces)}.
 
