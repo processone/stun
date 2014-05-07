@@ -541,16 +541,14 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		      error_logger:error_msg("wrong 'auth' "
 					     "value: ~p", [Wrong]),
 		      State;
-		 ({use_turn, _}, State) ->
-		      State;
-		 (use_turn, State) ->
-		      State;
-		 (inet, State) ->
-		      State;
-		 ({ip, _}, State) ->
-		      State;
-		 ({backlog, _}, State) ->
-		      State;
+		 ({use_turn, _}, State) -> State;
+		 (use_turn, State) -> State;
+		 (inet, State) -> State;
+		 ({ip, _}, State) -> State;
+		 ({backlog, _}, State) -> State;
+		 ({certfile, _}, State) -> State;
+		 ({tls, _}, State) -> State;
+		 (tls, State) -> State;
 		 (Opt, State) ->
 		      error_logger:error_msg(
 			"ignoring unknown option ~p", [Opt]),
