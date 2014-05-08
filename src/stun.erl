@@ -64,7 +64,6 @@
 -endif.
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
--type port_range() :: {inet:port_number(), inet:port_number()}.
 
 -record(state,
 	{sock                        :: inet:socket() | p1_tls:tls_socket(),
@@ -74,7 +73,8 @@
 	 tref = make_ref()           :: reference(),
 	 use_turn = false            :: boolean(),
 	 relay_ip = {127,0,0,1}      :: inet:ip_address(),
-	 port_range = {49152, 65535} :: port_range(),
+	 min_port = 49152            :: non_neg_integer(),
+	 max_port = 65535            :: non_neg_integer(),
 	 max_allocs = 10             :: non_neg_integer() | unlimited,
 	 shaper = none               :: stun_shaper:shaper(),
 	 max_permissions = 10        :: non_neg_integer() | unlimited,
@@ -328,7 +328,8 @@ process(State, #stun{class = request,
 		    {max_permissions, State#state.max_permissions},
 		    {addr, AddrPort},
 		    {relay_ip, State#state.relay_ip},
-		    {port_range, State#state.port_range} |
+		    {min_port, State#state.min_port},
+		    {max_port, State#state.max_port} |
 		    if SockMod /= gen_udp ->
 			    [{owner, self()}];
 		       true ->
@@ -460,13 +461,19 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 						     "value: ~p", [IP]),
 			      State
 		      end;
-		 ({turn_port_range, Min, Max}, State)
-		    when 1024 < Min, Min < Max, Max < 65536 ->
-		      State#state{port_range = {Min, Max}};
-		 ({turn_port_range, Min, Max}, State) ->
-		      error_logger:error_msg("invalid 'turn_port_range' ~p-~p, "
-					     "using 49152-65535 as fallback",
-					     [Min, Max]),
+		 ({turn_min_port, Min}, State)
+		    when is_integer(Min), Min > 1024, Min < 65536 ->
+		      State#state{min_port = Min};
+		 ({turn_min_port, Wrong}, State) ->
+		      error_logger:error_msg("wrong 'turn_min_port' value: "
+					     "~p", [Wrong]),
+		      State;
+		 ({turn_max_port, Max}, State)
+		    when is_integer(Max), Max > 1024, Max < 65536 ->
+		      State#state{max_port = Max};
+		 ({turn_max_port, Wrong}, State) ->
+		      error_logger:error_msg("wrong 'turn_max_port' value: "
+					     "~p", [Wrong]),
 		      State;
 		 ({turn_max_allocations, N}, State)
 		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->

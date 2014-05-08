@@ -54,7 +54,6 @@
 -define(DICT, dict).
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
--type port_range() :: {inet:port_number(), inet:port_number()}.
 
 -record(state,
 	{sock_mod = gen_udp             :: gen_udp | gen_tcp | p1_tls,
@@ -69,7 +68,8 @@
 	 channels = ?DICT:new()         :: dict(),
 	 max_permissions                :: non_neg_integer() | atom(),
 	 relay_ip = {127,0,0,1}         :: inet:ip_address(),
-	 port_range = {49152, 65535}    :: port_range(),
+	 min_port = 49152               :: non_neg_integer(),
+	 max_port = 65535               :: non_neg_integer(),
 	 relay_addr                     :: addr(),
 	 relay_sock                     :: inet:socket(),
 	 last_trid                      :: non_neg_integer(),
@@ -104,7 +104,8 @@ init([Opts]) ->
 		   sock = proplists:get_value(sock, Opts),
 		   key = proplists:get_value(key, Opts),
 		   relay_ip = proplists:get_value(relay_ip, Opts),
-		   port_range = proplists:get_value(port_range, Opts),
+		   min_port = proplists:get_value(min_port, Opts),
+		   max_port = proplists:get_value(max_port, Opts),
 		   max_permissions = proplists:get_value(max_permissions, Opts),
 		   server_name = proplists:get_value(server_name, Opts),
 		   realm = Realm, addr = AddrPort,
@@ -143,7 +144,7 @@ wait_for_allocate(#stun{class = request,
 			  'ERROR-CODE' = stun_codec:error(420)},
 	    {stop, normal, send(State, R)};
        true ->
-	    case allocate_addr(State#state.port_range) of
+	    case allocate_addr({State#state.min_port, State#state.max_port}) of
 		{ok, RelayPort, RelaySock} ->
 		    Lifetime = time_left(State#state.life_timer),
 		    AddrPort = State#state.addr,
