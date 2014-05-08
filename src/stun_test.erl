@@ -47,7 +47,8 @@ add_udp_listener_test() ->
     ?assertEqual(ok, stun_listener:add_listener(
 		       ?STUN_PORT, udp,
 		       [use_turn,
-			{realm, ?REALM},
+			{auth_type, user},
+			{auth_realm, ?REALM},
 			{auth_fun, fun(?USER, ?REALM) -> ?PASS;
 				      (_, _) -> <<"">>
 				   end}])).

@@ -78,7 +78,7 @@
 	 max_allocs = 5              :: non_neg_integer() | unlimited,
 	 shaper = none               :: stun_shaper:shaper(),
 	 max_permissions = 5         :: non_neg_integer() | unlimited,
-	 auth = [user]               :: [anonymous | user],
+	 auth = user                 :: anonymous | user,
 	 nonces = stun_treap:empty() :: stun_treap:treap(),
 	 realm = <<"">>              :: binary(),
 	 auth_fun                    :: function(),
@@ -190,84 +190,79 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-process(State, #stun{class = request, 'MESSAGE-INTEGRITY' = undefined} = Msg) ->
-    case Msg#stun.method of
-	?STUN_METHOD_BINDING ->
-	    process(State, Msg, undefined);
-	_ ->
-	    case lists:member(anonymous, State#state.auth) of
-		true ->
-		    process(State, Msg, undefined);
-		false ->
-		    Resp = prepare_response(State, Msg),
-		    case lists:member(user, State#state.auth) of
-			false ->
-			    R = Resp#stun{class = error,
-					  'ERROR-CODE' = stun_codec:error(401)},
-			    send(State, R);
-			true ->
-			    {Nonce, Nonces} = make_nonce(State#state.peer,
-							 State#state.nonces),
-			    R = Resp#stun{class = error,
-					  'ERROR-CODE' = stun_codec:error(401),
-					  'REALM' = State#state.realm,
-					  'NONCE' = Nonce},
-			    send(State#state{nonces = Nonces}, R)
-		    end
-	    end
-    end;
 process(State, #stun{class = request,
-		     'USERNAME' = User,
-		     'REALM' = Realm,
-		     'NONCE' = Nonce} = Msg)
+		     method = ?STUN_METHOD_BINDING,
+		     'MESSAGE-INTEGRITY' = undefined} = Msg) ->
+    process(State, Msg, undefined);
+process(#state{auth = anonymous} = State,
+	#stun{class = request, 'MESSAGE-INTEGRITY' = undefined} = Msg) ->
+    process(State, Msg, undefined);
+process(#state{auth = user} = State,
+	#stun{class = request, 'MESSAGE-INTEGRITY' = undefined} = Msg) ->
+    Resp = prepare_response(State, Msg),
+    {Nonce, Nonces} = make_nonce(State#state.peer,
+				 State#state.nonces),
+    R = Resp#stun{class = error,
+		  'ERROR-CODE' = stun_codec:error(401),
+		  'REALM' = State#state.realm,
+		  'NONCE' = Nonce},
+    send(State#state{nonces = Nonces}, R);
+process(#state{auth = anonymous} = State,
+	#stun{class = request,
+	      'USERNAME' = User,
+	      'REALM' = Realm,
+	      'NONCE' = Nonce} = Msg)
   when User /= undefined, Realm /= undefined, Nonce /= undefined ->
     Resp = prepare_response(State, Msg),
-    case lists:member(user, State#state.auth) of
-	false ->
-	    R = Resp#stun{class = error,
-			  'ERROR-CODE' = stun_codec:error(401)},
-	    send(State, R);
+    R = Resp#stun{class = error,
+		  'ERROR-CODE' = stun_codec:error(401)},
+    send(State, R);
+process(#state{auth = user} = State,
+	#stun{class = request,
+	      'USERNAME' = User,
+	      'REALM' = Realm,
+	      'NONCE' = Nonce} = Msg)
+  when User /= undefined, Realm /= undefined, Nonce /= undefined ->
+    Resp = prepare_response(State, Msg),
+    {HaveNonce, Nonces} = have_nonce(Nonce, State#state.nonces),
+    case HaveNonce of
 	true ->
-	    {HaveNonce, Nonces} = have_nonce(Nonce, State#state.nonces),
-	    case HaveNonce of
-		true ->
-		    NewState = State#state{nonces = Nonces},
-		    R = Resp#stun{class = error,
-				  'ERROR-CODE' = stun_codec:error(401),
-				  'REALM' = State#state.realm,
-				  'NONCE' = Nonce},
-		    case (State#state.auth_fun)(User, Realm) of
-			<<"">> ->
+	    NewState = State#state{nonces = Nonces},
+	    R = Resp#stun{class = error,
+			  'ERROR-CODE' = stun_codec:error(401),
+			  'REALM' = State#state.realm,
+			  'NONCE' = Nonce},
+	    case (State#state.auth_fun)(User, Realm) of
+		<<"">> ->
+		    error_logger:info_msg(
+		      "failed long-term STUN authentication "
+		      "for ~s@~s from ~s",
+		      [User, Realm, addr_to_str(State#state.peer)]),
+		    send(NewState, R);
+		Pass ->
+		    Key = {User, Realm, Pass},
+		    case stun_codec:check_integrity(Msg, Key) of
+			true ->
+			    error_logger:info_msg(
+			      "accepted long-term STUN authentication "
+			      "for ~s@~s from ~s",
+			      [User, Realm, addr_to_str(State#state.peer)]),
+			    process(NewState, Msg, Key);
+			false ->
 			    error_logger:info_msg(
 			      "failed long-term STUN authentication "
 			      "for ~s@~s from ~s",
 			      [User, Realm, addr_to_str(State#state.peer)]),
-			    send(NewState, R);
-			Pass ->
-			    Key = {User, Realm, Pass},
-			    case stun_codec:check_integrity(Msg, Key) of
-				true ->
-				    error_logger:info_msg(
-				      "accepted long-term STUN authentication "
-				      "for ~s@~s from ~s",
-				      [User, Realm, addr_to_str(State#state.peer)]),
-				    process(NewState, Msg, Key);
-				false ->
-				    error_logger:info_msg(
-				      "failed long-term STUN authentication "
-				      "for ~s@~s from ~s",
-				      [User, Realm, addr_to_str(State#state.peer)]),
-				    send(NewState, R)
-			    end
-		    end;
-		false ->
-		    {NewNonce, NewNonces} = make_nonce(State#state.peer, Nonces),
-		    R = Resp#stun{class = error,
-				  'ERROR-CODE' = stun_codec:error(438),
-				  'REALM' = State#state.realm,
-				  'NONCE' = NewNonce},
-		    send(State#state{nonces = NewNonces}, R)
-	    end
+			    send(NewState, R)
+		    end
+	    end;
+	false ->
+	    {NewNonce, NewNonces} = make_nonce(State#state.peer, Nonces),
+	    R = Resp#stun{class = error,
+			  'ERROR-CODE' = stun_codec:error(438),
+			  'REALM' = State#state.realm,
+			  'NONCE' = NewNonce},
+	    send(State#state{nonces = NewNonces}, R)
     end;
 process(State, #stun{class = request,
 		     'USERNAME' = User,
@@ -502,11 +497,11 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 						     "value: ~p", [S]),
 			      State
 		      end;
-		 ({realm, R}, State) ->
+		 ({auth_realm, R}, State) ->
 		      try
 			  State#state{realm = iolist_to_binary(R)}
 		      catch _:_ ->
-			      error_logger:error_msg("wrong 'realm' "
+			      error_logger:error_msg("wrong 'auth_realm' "
 						     "value: ~p", [R]),
 			      State
 		      end;
@@ -516,29 +511,12 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		      error_logger:error_msg("wrong 'auth_fun' "
 					     "value: ~p", [Wrong]),
 		      State;
-		 ({auth, Auth}, State) when is_list(Auth) ->
-		      {ValidAuth, WrongAuth} = lists:partition(
-						 fun(anonymous) -> true;
-						    (user) -> true;
-						    (_) -> false
-						 end, Auth),
-		      case WrongAuth of
-			  [_|_] ->
-			      error_logger:error_msg(
-				"ignoring unknown auth types: ~p",
-				[WrongAuth]);
-			  _ ->
-			      ok
-		      end,
-		      case ValidAuth of
-			  [] ->
-			      error_logger:error_msg("empty 'auth' value", []),
-			      State;
-			  _ ->
-			      State#state{auth = ValidAuth}
-		      end;
-		 ({auth, Wrong}, State) ->
-		      error_logger:error_msg("wrong 'auth' "
+		 ({auth_type, anonymous}, State) ->
+		      State#state{auth = anonymous};
+		 ({auth_type, user}, State) ->
+		      State#state{auth = user};
+		 ({auth_type, Wrong}, State) ->
+		      error_logger:error_msg("wrong 'auth_type' "
 					     "value: ~p", [Wrong]),
 		      State;
 		 ({use_turn, _}, State) -> State;
