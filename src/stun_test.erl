@@ -25,6 +25,8 @@
 %%%-------------------------------------------------------------------
 -module(stun_test).
 
+-export([bind_udp/2, bind_tcp/2, allocate_udp/5]).
+
 -define(STUN_PORT, 34780).
 -define(STUNS_PORT, 53490).
 -define(RECV_TIMEOUT, timer:seconds(5)).
@@ -230,6 +232,97 @@ allocate_udp_test() ->
        stun_codec:decode(PktIn7, datagram)),
     ?assertEqual(ok, gen_udp:close(PeerSocket)),
     ?assertEqual(ok, gen_udp:close(Socket)).
+
+%%--------------------------------------------------------------------
+%% External functions
+%%--------------------------------------------------------------------
+bind_udp(Host, Port) ->
+    TrID = mk_trid(),
+    MsgOut = #stun{method = ?STUN_METHOD_BINDING,
+		   class = request,
+		   trid = TrID},
+    try
+	{ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+	PktOut = stun_codec:encode(MsgOut),
+	ok = gen_udp:send(Socket, Host, Port, PktOut),
+	{ok, {_, _, PktIn}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
+	{ok, MsgIn = #stun{trid = TrID,
+			   'XOR-MAPPED-ADDRESS' = Addr}} =
+	    stun_codec:decode(PktIn, datagram),
+	gen_udp:close(Socket),
+	MsgIn
+    catch _:{badmatch, Err} ->
+	    Err
+    end.
+
+bind_tcp(Host, Port) ->
+    TrID = mk_trid(),
+    MsgOut = #stun{method = ?STUN_METHOD_BINDING,
+		   class = request,
+		   trid = TrID},
+    try
+	{ok, Socket} = gen_tcp:connect(Host, Port,
+				       [binary, {active, false}]),
+	Pkt = stun_codec:encode(MsgOut),
+	ok = gen_tcp:send(Socket, Pkt),
+	{ok, MsgIn = #stun{trid = TrID,
+			   'XOR-MAPPED-ADDRESS' = Addr}} =
+	    recv(Socket, <<>>, false),
+	gen_tcp:close(Socket),
+	MsgIn
+    catch _:{badmatch, Err} ->
+	    Err
+    end.
+
+allocate_udp(Host, Port, User, Realm, Pass) ->
+    try
+	{ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+	%% Allocating address, receiving 401 with nonce and realm
+	TrID1 = mk_trid(),
+	Msg1 = #stun{method = ?STUN_METHOD_ALLOCATE,
+		     class = request,
+		     trid = TrID1},
+	PktOut1 = stun_codec:encode(Msg1),
+	ok = gen_udp:send(Socket, Host, Port, PktOut1),
+	{ok, {_, _, PktIn1}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
+	{ok, #stun{trid = TrID1,
+		   class = error,
+		   'ERROR-CODE' = {401, _},
+		   'NONCE' = Nonce,
+		   'REALM' = Realm}} = stun_codec:decode(PktIn1, datagram),
+	%% Repeating allocation from the first step
+	TrID2 = mk_trid(),
+	Msg2 = #stun{method = ?STUN_METHOD_ALLOCATE,
+		     trid = TrID2,
+		     'REQUESTED-TRANSPORT' = udp,
+		     'NONCE' = Nonce,
+		     'REALM' = Realm,
+		     'USERNAME' = User},
+	PktOut2 = stun_codec:encode(Msg2, {User, Realm, Pass}),
+	ok = gen_udp:send(Socket, Host, Port, PktOut2),
+	{ok, {_, _, PktIn2}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
+	{ok, #stun{trid = TrID2,
+		   class = response,
+		   'XOR-MAPPED-ADDRESS' = Addr}} = stun_codec:decode(PktIn2, datagram),
+	%% Destroying the allocation via Refresh method (with LIFETIME set to zero)
+	TrID7 = mk_trid(),
+	Msg7 = #stun{method = ?STUN_METHOD_REFRESH,
+		     trid = TrID7,
+		     'LIFETIME' = 0,
+		     'NONCE' = Nonce,
+		     'REALM' = Realm,
+		     'USERNAME' = User},
+	PktOut7 = stun_codec:encode(Msg7, {User, Realm, Pass}),
+	ok = gen_udp:send(Socket, Host, Port, PktOut7),
+	{ok, {_, _, PktIn7}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
+	{ok, #stun{trid = TrID7,
+		   'LIFETIME' = 0,
+		   class = response}} =
+	    stun_codec:decode(PktIn7, datagram),
+	gen_udp:close(Socket)
+    catch _:{badmatch, Err} ->
+	    Err
+    end.
 
 %%--------------------------------------------------------------------
 %%% Internal functions
