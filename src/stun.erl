@@ -79,7 +79,7 @@
 	 shaper = none               :: stun_shaper:shaper(),
 	 max_permissions = 10        :: non_neg_integer() | unlimited,
 	 auth = user                 :: anonymous | user,
-	 nonces = stun_treap:empty() :: stun_treap:treap(),
+	 nonces = treap:empty()      :: treap:treap(),
 	 realm = <<"">>              :: binary(),
 	 auth_fun                    :: function(),
 	 server_name = ?SERVER_NAME  :: binary(),
@@ -587,13 +587,13 @@ now_priority() ->
     -((MSec*1000000 + Sec)*1000000 + USec).
 
 clean_treap(Treap, CleanPriority) ->
-    case stun_treap:is_empty(Treap) of
+    case treap:is_empty(Treap) of
 	true ->
 	    Treap;
 	false ->
-	    {_Key, Priority, _Value} = stun_treap:get_root(Treap),
+	    {_Key, Priority, _Value} = treap:get_root(Treap),
 	    if Priority > CleanPriority ->
-		    clean_treap(stun_treap:delete_root(Treap), CleanPriority);
+		    clean_treap(treap:delete_root(Treap), CleanPriority);
 	       true ->
 		    Treap
 	    end
@@ -603,12 +603,12 @@ make_nonce(Addr, Nonces) ->
     Priority = now_priority(),
     Nonce = erlang:integer_to_binary(random:uniform(1 bsl 32)),
     NewNonces = clean_treap(Nonces, Priority + ?NONCE_LIFETIME),
-    {Nonce, stun_treap:insert(Nonce, Priority, Addr, NewNonces)}.
+    {Nonce, treap:insert(Nonce, Priority, Addr, NewNonces)}.
 
 have_nonce(Nonce, Nonces) ->
     Priority = now_priority(),
     NewNonces = clean_treap(Nonces, Priority + ?NONCE_LIFETIME),
-    case stun_treap:lookup(Nonce, NewNonces) of
+    case treap:lookup(Nonce, NewNonces) of
 	{ok, _, _} ->
 	    {true, NewNonces};
 	_ ->
