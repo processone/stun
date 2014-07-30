@@ -601,7 +601,7 @@ clean_treap(Treap, CleanPriority) ->
 
 make_nonce(Addr, Nonces) ->
     Priority = now_priority(),
-    Nonce = erlang:integer_to_binary(random:uniform(1 bsl 32)),
+    Nonce = list_to_binary(integer_to_list(random:uniform(1 bsl 32))),
     NewNonces = clean_treap(Nonces, Priority + ?NONCE_LIFETIME),
     {Nonce, treap:insert(Nonce, Priority, Addr, NewNonces)}.
 
