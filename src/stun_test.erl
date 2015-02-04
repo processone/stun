@@ -5,7 +5,7 @@
 %%% Created :  7 Aug 2009 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
-%%% ejabberd, Copyright (C) 2002-2010   ProcessOne
+%%% stun, Copyright (C) 2002-2015   ProcessOne
 %%%
 %%% This program is free software; you can redistribute it and/or
 %%% modify it under the terms of the GNU General Public License as
@@ -23,6 +23,7 @@
 %%% 02111-1307 USA
 %%%
 %%%-------------------------------------------------------------------
+
 -module(stun_test).
 
 -export([bind_udp/2, bind_tcp/2, allocate_udp/5]).

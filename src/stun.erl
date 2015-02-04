@@ -2,11 +2,10 @@
 %%% File    : stun.erl
 %%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%% Description : RFC5389/RFC5766 implementation.
-%%%
 %%% Created :  8 Aug 2009 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
-%%% stun, Copyright (C) 2002-2014   ProcessOne
+%%% stun, Copyright (C) 2002-2015   ProcessOne
 %%%
 %%% This program is free software; you can redistribute it and/or
 %%% modify it under the terms of the GNU General Public License as
@@ -24,6 +23,7 @@
 %%% 02111-1307 USA
 %%%
 %%%-------------------------------------------------------------------
+
 -module(stun).
 
 -define(GEN_FSM, gen_fsm).
