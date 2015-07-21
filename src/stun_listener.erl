@@ -36,7 +36,7 @@
          terminate/2, code_change/3]).
 
 -define(TCP_SEND_TIMEOUT, 10000).
--record(state, {listeners = dict:new() :: dict:dict()}).
+-record(state, {listeners = dict:new()}).
 
 %%%===================================================================
 %%% API
