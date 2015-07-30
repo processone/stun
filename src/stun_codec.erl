@@ -101,13 +101,13 @@ encode(#stun{class = Class,
     if Key /= undefined ->
 	    NewKey = case Key of
 			 {User, Realm, Password} ->
-			     crypto:md5([User, $:, Realm, $:, Password]);
+			     crypto:hash(md5, [User, $:, Realm, $:, Password]);
 			 _ ->
 			     Key
 		     end,
 	    Data = <<0:2, Type:14, (Len+24):16, Magic:32,
 		    TrID:96, Attrs/binary>>,
-	    MessageIntegrity = crypto:sha_mac(NewKey, Data),
+	    MessageIntegrity = crypto:hmac(sha, NewKey, Data),
 	    <<Data/binary, ?STUN_ATTR_MESSAGE_INTEGRITY:16,
 	     20:16, MessageIntegrity/binary>>;
        true ->
@@ -124,11 +124,11 @@ check_integrity(#stun{raw = Raw, 'MESSAGE-INTEGRITY' = MI}, Key)
   when is_binary(Raw), is_binary(MI), Key /= undefined ->
     NewKey = case Key of
 		 {User, Realm, Password} ->
-		     crypto:md5([User, $:, Realm, $:, Password]);
+		     crypto:hash(md5, [User, $:, Realm, $:, Password]);
 		 _ ->
 		     Key
 	     end,
-    crypto:sha_mac(NewKey, Raw) == MI;
+    crypto:hmac(sha, NewKey, Raw) == MI;
 check_integrity(_Msg, _Key) ->
     false.
 
