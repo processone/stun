@@ -248,7 +248,7 @@ bind_udp(Host, Port) ->
 	ok = gen_udp:send(Socket, Host, Port, PktOut),
 	{ok, {_, _, PktIn}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
 	{ok, MsgIn = #stun{trid = TrID,
-			   'XOR-MAPPED-ADDRESS' = Addr}} =
+			   'XOR-MAPPED-ADDRESS' = _Addr}} =
 	    stun_codec:decode(PktIn, datagram),
 	gen_udp:close(Socket),
 	MsgIn
@@ -267,7 +267,7 @@ bind_tcp(Host, Port) ->
 	Pkt = stun_codec:encode(MsgOut),
 	ok = gen_tcp:send(Socket, Pkt),
 	{ok, MsgIn = #stun{trid = TrID,
-			   'XOR-MAPPED-ADDRESS' = Addr}} =
+			   'XOR-MAPPED-ADDRESS' = _Addr}} =
 	    recv(Socket, <<>>, false),
 	gen_tcp:close(Socket),
 	MsgIn
@@ -304,7 +304,7 @@ allocate_udp(Host, Port, User, Realm, Pass) ->
 	{ok, {_, _, PktIn2}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
 	{ok, #stun{trid = TrID2,
 		   class = response,
-		   'XOR-MAPPED-ADDRESS' = Addr}} = stun_codec:decode(PktIn2, datagram),
+		   'XOR-MAPPED-ADDRESS' = _Addr}} = stun_codec:decode(PktIn2, datagram),
 	%% Destroying the allocation via Refresh method (with LIFETIME set to zero)
 	TrID7 = mk_trid(),
 	Msg7 = #stun{method = ?STUN_METHOD_REFRESH,
