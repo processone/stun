@@ -1,0 +1,14 @@
+.rebar/
+config.log
+config.status
+ebin
+priv/
+.eunit
+_build
+vars.config
+rebar
+deps/
+
+*.eqc
+.eqc-info
+mix.lock
