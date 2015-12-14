@@ -35,7 +35,109 @@ You can trigger build with:
 
 # Usage
 
-TODO
+The following sequence describe a STUN establishment:
+
+```
+1> application:start(p1_stun).
+ok
+2> stun_listener:add_listener(3478, udp, []).
+ok
+```
+
+Then, you can form and send a BindRequest:
+
+```
+3> rr(stun).
+[state,stun,turn]
+4> random:seed(erlang:timestamp()).
+undefined
+```
+
+You can form a transaction id. Should be always 96 bit:
+
+```
+5> TrID = random:uniform(1 bsl 96).
+41809861624941132369239212033
+```
+
+You then create a BindRequest message.
+
+`16#001` is `?STUN_METHOD_BINDING`, defined in `include/stun.hrl`
+
+```
+6> Msg = #stun{method = 16#001, class = request, trid = TrID}.
+#stun{class = request,method = 1,magic = 554869826,
+     trid = 41809861624941132369239212033,raw = <<>>,
+     unsupported = [],'ALTERNATE-SERVER' = undefined,
+     'CHANNEL-NUMBER' = undefined,'DATA' = undefined,
+     'DONT-FRAGMENT' = false,'ERROR-CODE' = undefined,
+     'LIFETIME' = undefined,'MAPPED-ADDRESS' = undefined,
+     'MESSAGE-INTEGRITY' = undefined,'NONCE' = undefined,
+     'REALM' = undefined,'REQUESTED-TRANSPORT' = undefined,
+     'SOFTWARE' = undefined,'UNKNOWN-ATTRIBUTES' = [],
+     'USERNAME' = undefined,'XOR-MAPPED-ADDRESS' = undefined,
+     'XOR-PEER-ADDRESS' = [],'XOR-RELAYED-ADDRESS' = undefined}
+```
+
+You can then establish connection to running server:
+
+```
+7> {ok, Socket} = gen_udp:open(0, [binary, {ip,
+7> {127,0,0,1}},{active,false}]).
+{ok,#Port<0.1020>}
+8> {ok, Addr} = inet:sockname(Socket).
+{ok,{{127,0,0,1},41906}}
+```
+
+The following call is for encoding BindRequest:
+
+```
+9> PktOut = stun_codec:encode(Msg).
+<<0,1,0,0,33,18,164,66,135,24,78,148,65,4,128,0,0,0,0,1>>
+```
+
+The BindRequest can then be send:
+
+```
+10> gen_udp:send(Socket, {127,0,0,1}, 3478, PktOut).
+ok
+```
+
+The follow code receives the BindResponse:
+
+```
+11> {ok, {_, _, PktIn}} = gen_udp:recv(Socket, 0).
+{ok,{{127,0,0,1},
+    3478,
+    <<1,1,0,32,33,18,164,66,135,24,78,148,65,4,128,0,0,0,0,
+      1,128,34,0,15,...>>}}
+```
+
+You can then decode the BindResponse:
+
+```
+12> {ok, Response} = stun_codec:decode(PktIn, datagram).
+{ok,#stun{class = response,method = 1,magic = 554869826,
+         trid = 41809861624941132369239212033,raw = <<>>,
+         unsupported = [],'ALTERNATE-SERVER' = undefined,
+         'CHANNEL-NUMBER' = undefined,'DATA' = undefined,
+         'DONT-FRAGMENT' = false,'ERROR-CODE' = undefined,
+         'LIFETIME' = undefined,'MAPPED-ADDRESS' = undefined,
+         'MESSAGE-INTEGRITY' = undefined,'NONCE' = undefined,
+         'REALM' = undefined,'REQUESTED-TRANSPORT' = undefined,
+         'SOFTWARE' = <<"P1 STUN library">>,
+         'UNKNOWN-ATTRIBUTES' = [],'USERNAME' = undefined,
+         'XOR-MAPPED-ADDRESS' = {{127,0,0,1},41906},
+         'XOR-PEER-ADDRESS' = [],'XOR-RELAYED-ADDRESS' = undefined}}
+```
+
+Finally, checking 'XOR-MAPPED-ADDRESS' attribute, should be equal to locally
+binded address:
+
+```
+13> Addr == Response#stun.'XOR-MAPPED-ADDRESS'.
+true
+```
 
 # References
 
