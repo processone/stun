@@ -580,16 +580,15 @@ cancel_timer(TRef) ->
     end.
 
 now_priority() ->
-    {MSec, Sec, USec} = now(),
-    -((MSec*1000000 + Sec)*1000000 + USec).
+    {p1_time_compat:monotonic_time(micro_seconds), p1_time_compat:unique_integer([monotonic])}.
 
 clean_treap(Treap, CleanPriority) ->
     case treap:is_empty(Treap) of
 	true ->
 	    Treap;
 	false ->
-	    {_Key, Priority, _Value} = treap:get_root(Treap),
-	    if Priority > CleanPriority ->
+	    {_Key, {TS, _}, _Value} = treap:get_root(Treap),
+	    if TS > CleanPriority ->
 		    clean_treap(treap:delete_root(Treap), CleanPriority);
 	       true ->
 		    Treap
@@ -598,13 +597,14 @@ clean_treap(Treap, CleanPriority) ->
 
 make_nonce(Addr, Nonces) ->
     Priority = now_priority(),
+    {TS, _} = Priority,
     Nonce = list_to_binary(integer_to_list(random:uniform(1 bsl 32))),
-    NewNonces = clean_treap(Nonces, Priority + ?NONCE_LIFETIME),
+    NewNonces = clean_treap(Nonces, TS + ?NONCE_LIFETIME),
     {Nonce, treap:insert(Nonce, Priority, Addr, NewNonces)}.
 
 have_nonce(Nonce, Nonces) ->
-    Priority = now_priority(),
-    NewNonces = clean_treap(Nonces, Priority + ?NONCE_LIFETIME),
+    TS = p1_time_compat:monotonic_time(micro_seconds),
+    NewNonces = clean_treap(Nonces, TS + ?NONCE_LIFETIME),
     case treap:lookup(Nonce, NewNonces) of
 	{ok, _, _} ->
 	    {true, NewNonces};
