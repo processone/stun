@@ -644,7 +644,7 @@ maybe_starttls(Sock, gen_tcp, _CertFile, _PeerAddr) ->
     {ok, Sock}.
 
 seed() ->
-    {A, B, C} = now(),
+    {A, B, C} = p1_time_compat:timestamp(),
     random:seed(A, B, C).
 
 prepare_response(State, Msg) ->

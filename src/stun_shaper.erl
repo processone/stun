@@ -43,7 +43,7 @@
 new(none) -> none;
 new(MaxRate) when is_integer(MaxRate) ->
     #maxrate{maxrate = MaxRate, lastrate = 0.0,
-	     lasttime = now_to_usec(now())}.
+	     lasttime = p1_time_compat:monotonic_time(micro_seconds)}.
 
 -spec update(shaper(), integer()) -> {shaper(), integer()}.
 
@@ -51,19 +51,16 @@ update(none, _Size) -> {none, 0};
 update(#maxrate{} = State, Size) ->
     MinInterv = 1000 * Size /
 		  (2 * State#maxrate.maxrate - State#maxrate.lastrate),
-    Interv = (now_to_usec(now()) - State#maxrate.lasttime) /
+    Interv = (p1_time_compat:monotonic_time(micro_seconds) - State#maxrate.lasttime) /
 	       1000,
     Pause = if MinInterv > Interv ->
 		   1 + trunc(MinInterv - Interv);
 	       true -> 0
 	    end,
-    NextNow = now_to_usec(now()) + Pause * 1000,
+    NextNow = p1_time_compat:monotonic_time(micro_seconds) + Pause * 1000,
     {State#maxrate{lastrate =
 		       (State#maxrate.lastrate +
 			  1000000 * Size / (NextNow - State#maxrate.lasttime))
 			 / 2,
 		   lasttime = NextNow},
      Pause}.
-
-now_to_usec({MSec, Sec, USec}) ->
-    (MSec * 1000000 + Sec) * 1000000 + USec.

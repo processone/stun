@@ -115,7 +115,7 @@ init([Opts]) ->
 	    ok
     end,
     TRef = erlang:start_timer(?DEFAULT_LIFETIME, self(), stop),
-    {A1, A2, A3} = now(),
+    {A1, A2, A3} = p1_time_compat:timestamp(),
     random:seed(A1, A2, A3),
     case turn_sm:add_allocation(AddrPort, Username, Realm, MaxAllocs, self()) of
 	ok ->
