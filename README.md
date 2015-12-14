@@ -1,4 +1,6 @@
-# stun
+# STUN
+
+[![Build Status](https://travis-ci.org/processone/stun.svg?branch=master)](https://travis-ci.org/processone/stun) [![Coverage Status](https://coveralls.io/repos/processone/stun/badge.svg?branch=master&service=github)](https://coveralls.io/github/processone/stun?branch=master) [![Hex version](https://img.shields.io/hexpm/v/stun.svg "Hex version")](https://hex.pm/packages/stun)
 
 STUN and TURN library for Erlang / Elixir.
 
