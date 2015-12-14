@@ -37,7 +37,9 @@ You can trigger build with:
 
 # Usage
 
-The following sequence describe a STUN establishment:
+The following sequence describe a STUN establishment.
+
+First, start the application and stun listener:
 
 ```
 1> application:start(p1_stun).
