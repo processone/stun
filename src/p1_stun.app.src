@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 {application, p1_stun,
  [{description,  "STUN library"},
-  {vsn,          "0.1.0"},
+  {vsn,          "0.9.0"},
   {modules,      []},
   {registered,   []},
   {applications, [kernel, stdlib]},
