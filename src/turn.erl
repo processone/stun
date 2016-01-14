@@ -54,8 +54,8 @@
 -type addr() :: {inet:ip_address(), inet:port_number()}.
 
 -record(state,
-	{sock_mod = gen_udp             :: gen_udp | gen_tcp | p1_tls,
-	 sock                           :: inet:socket() | p1_tls:tls_socket(),
+	{sock_mod = gen_udp             :: gen_udp | gen_tcp | fast_tls,
+	 sock                           :: inet:socket() | fast_tls:tls_socket(),
 	 addr = {{0,0,0,0}, 0}          :: addr(),
 	 owner = self()                 :: pid(),
 	 username = <<"">>              :: binary(),

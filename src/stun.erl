@@ -63,8 +63,8 @@
 -type addr() :: {inet:ip_address(), inet:port_number()}.
 
 -record(state,
-	{sock                        :: inet:socket() | p1_tls:tls_socket(),
-	 sock_mod = gen_tcp          :: gen_udp | gen_tcp | p1_tls,
+	{sock                        :: inet:socket() | fast_tls:tls_socket(),
+	 sock_mod = gen_tcp          :: gen_udp | gen_tcp | fast_tls,
 	 certfile                    :: iodata(),
 	 peer = {{0,0,0,0}, 0}       :: addr(),
 	 tref = make_ref()           :: reference(),
@@ -150,9 +150,9 @@ handle_sync_event(_Event, _From, StateName, State) ->
     {reply, {error, badarg}, StateName, State}.
 
 handle_info({tcp, _Sock, TLSData}, StateName,
-	    #state{sock_mod = p1_tls} = State) ->
+	    #state{sock_mod = fast_tls} = State) ->
     NewState = update_shaper(State, TLSData),
-    case p1_tls:recv_data(NewState#state.sock, TLSData) of
+    case fast_tls:recv_data(NewState#state.sock, TLSData) of
 	{ok, Data} ->
 	    process_data(StateName, NewState, Data);
 	_Err ->
@@ -620,7 +620,7 @@ addr_to_str(Addr) ->
 get_sockmod(Opts) ->
     case proplists:get_bool(tls, Opts) of
 	true ->
-	    p1_tls;
+	    fast_tls;
 	false ->
 	    gen_tcp
     end.
@@ -633,13 +633,13 @@ get_certfile(Opts) ->
 	    undefined
     end.
 
-maybe_starttls(_Sock, p1_tls, undefined, {IP, Port}) ->
+maybe_starttls(_Sock, fast_tls, undefined, {IP, Port}) ->
     error_logger:error_msg("failed to start TLS connection for ~s:~p: "
 			   "option 'certfile' is not set",
 			   [inet_parse:ntoa(IP), Port]),
     {error, eprotonosupport};
-maybe_starttls(Sock, p1_tls, CertFile, _PeerAddr) ->
-    p1_tls:tcp_to_tls(Sock, [{certfile, CertFile}]);
+maybe_starttls(Sock, fast_tls, CertFile, _PeerAddr) ->
+    fast_tls:tcp_to_tls(Sock, [{certfile, CertFile}]);
 maybe_starttls(Sock, gen_tcp, _CertFile, _PeerAddr) ->
     {ok, Sock}.
 

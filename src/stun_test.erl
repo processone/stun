@@ -37,7 +37,7 @@
 -include("stun.hrl").
 
 init_test() ->
-    ?assertEqual(ok, application:start(p1_tls)),
+    ?assertEqual(ok, application:start(fast_tls)),
     ?assertEqual(ok, application:start(p1_stun)).
 
 mk_cert_test() ->
@@ -99,13 +99,13 @@ bind_tls_test() ->
  		trid = TrID},
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, ?STUNS_PORT,
 				   [binary, {active, true}]),
-    {ok, TLSSocket} = p1_tls:tcp_to_tls(
+    {ok, TLSSocket} = fast_tls:tcp_to_tls(
 			Socket, [{certfile, <<"certfile.pem">>}, connect]),
-    ?assertEqual({ok, <<>>}, p1_tls:recv_data(TLSSocket, <<>>)),
-    {ok, Addr} = p1_tls:sockname(TLSSocket),
+    ?assertEqual({ok, <<>>}, fast_tls:recv_data(TLSSocket, <<>>)),
+    {ok, Addr} = fast_tls:sockname(TLSSocket),
     Pkt = stun_codec:encode(Msg),
     recv(TLSSocket, <<>>, true),
-    ?assertEqual(ok, p1_tls:send(TLSSocket, Pkt)),
+    ?assertEqual(ok, fast_tls:send(TLSSocket, Pkt)),
     ?assertMatch(
        {ok, #stun{trid = TrID,
 		  'XOR-MAPPED-ADDRESS' = Addr}},
@@ -339,7 +339,7 @@ recv(Socket, Buf, false) ->
 recv(TLSSocket, Buf, true) ->
     receive
 	{tcp, _Sock, TLSData} ->
-	    {ok, Data} = p1_tls:recv_data(TLSSocket, TLSData),
+	    {ok, Data} = fast_tls:recv_data(TLSSocket, TLSData),
 	    NewBuf = <<Buf/binary, Data/binary>>,
 	    case stun_codec:decode(NewBuf, stream) of
 		{ok, Msg, _Tail} ->

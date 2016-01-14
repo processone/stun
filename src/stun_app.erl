@@ -49,7 +49,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-    application:start(p1_tls),
+    application:start(fast_tls),
     case stun_sup:start_link() of
         {ok, Pid} ->
             {ok, Pid};
