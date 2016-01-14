@@ -147,6 +147,16 @@ binded address:
 true
 ```
 
+## Development
+
+### Test
+
+#### Unit test
+
+You can run eunit test with the command:
+
+    make test
+
 # References
 
 You can refer to IETF specifications to learn more:
