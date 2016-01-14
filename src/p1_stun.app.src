@@ -27,7 +27,12 @@
   {modules,      []},
   {registered,   []},
   {applications, [kernel, stdlib]},
-  {mod,          {stun_app,[]}}]}.
+  {mod,          {stun_app,[]}},
+
+  %% hex.pm packaging:
+  {licenses, ["Apache 2.0"]},
+  {maintainers, ["ProcessOne"]},
+  {links, [{"Github", "https://github.com/processone/stun"}]}]}.
 
 %% Local Variables:
 %% mode: erlang
