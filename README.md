@@ -27,7 +27,11 @@ To summarize:
 ## Build
 
 This is a pure Erlang implementation, so you do not need to have
-specific C libraries installed.
+specific C libraries installed for the STUN, TURN, ICE code.
+
+However, this code depends on ProcessOne
+[Fast TLS](https://github.com/processone/fast_tls), which depends on
+OpenSSL 1.0.0+ library.
 
 ### Generic build
 
