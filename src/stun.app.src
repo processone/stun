@@ -1,5 +1,5 @@
 %%%----------------------------------------------------------------------
-%%% File    : p1_stun.app.src
+%%% File    : stun.app.src
 %%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%% Purpose : Application package description
 %%% Created : 4 Apr 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
@@ -21,9 +21,9 @@
 %%%
 %%%----------------------------------------------------------------------
 
-{application, p1_stun,
+{application, stun,
  [{description,  "STUN and TURN library for Erlang / Elixir"},
-  {vsn,          "1.0.0"},
+  {vsn,          "1.0.0-beta1"},
   {modules,      []},
   {registered,   []},
   {applications, [kernel, stdlib]},

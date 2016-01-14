@@ -46,7 +46,7 @@ The following sequence describe a STUN establishment.
 First, start the application and stun listener:
 
 ```
-1> application:start(p1_stun).
+1> application:start(stun).
 ok
 2> stun_listener:add_listener(3478, udp, []).
 ok

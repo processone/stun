@@ -38,7 +38,7 @@
 
 init_test() ->
     ?assertEqual(ok, application:start(fast_tls)),
-    ?assertEqual(ok, application:start(p1_stun)).
+    ?assertEqual(ok, application:start(stun)).
 
 mk_cert_test() ->
     ?assertEqual(ok, file:write_file("certfile.pem", get_cert())).
