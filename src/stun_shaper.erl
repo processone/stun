@@ -5,7 +5,7 @@
 %%% Created :  9 Feb 2003 by Alexey Shchepin <alexey@process-one.net>
 %%%
 %%%
-%%% Copyright (C) 2002-2015 ProcessOne, SARL. All Rights Reserved.
+%%% Copyright (C) 2002-2016 ProcessOne, SARL. All Rights Reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
