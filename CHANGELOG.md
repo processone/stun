@@ -1,3 +1,7 @@
+# Version 1.0.3
+
+* Use Fast TLS 1.0.3 (Mickaël Rémond)
+
 # Version 1.0.2
 
 * Use Fast TLS 1.0.2 (Mickaël Rémond)
