@@ -37,6 +37,7 @@
 -export([wait_for_allocate/2, active/2]).
 
 -include("stun.hrl").
+-include("compatible.hrl").
 
 %%-define(debug, true).
 -ifdef(debug).
@@ -115,8 +116,7 @@ init([Opts]) ->
 	    ok
     end,
     TRef = erlang:start_timer(?DEFAULT_LIFETIME, self(), stop),
-    {A1, A2, A3} = p1_time_compat:timestamp(),
-    random:seed(A1, A2, A3),
+    ?seed(),
     case turn_sm:add_allocation(AddrPort, Username, Realm, MaxAllocs, self()) of
 	ok ->
 	    {ok, wait_for_allocate, State#state{life_timer = TRef}};
@@ -438,7 +438,7 @@ time_left(TRef) ->
 %% draft-ietf-tsvwg-port-randomization-04
 allocate_addr({Min, Max}) ->
     Count = Max - Min + 1,
-    Next = Min + random:uniform(Count) - 1,
+    Next = Min + ?RANDOM:uniform(Count) - 1,
     allocate_addr(Min, Max, Next, Count).
 
 allocate_addr(_Min, _Max, _Next, 0) ->
