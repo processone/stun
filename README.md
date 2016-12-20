@@ -13,7 +13,7 @@ peers for VoIP (for example using
 [Jingle](http://xmpp.org/about-xmpp/technology-overview/jingle/)) and
 [WebRTC](https://en.wikipedia.org/wiki/WebRTC).
 
-They are part of a more general negociation technique know as
+They are part of a more general negotiation technique know as
 [ICE](https://en.wikipedia.org/wiki/Interactive_Connectivity_Establishment)
 (Interactive Connectivity Establishment).
 
