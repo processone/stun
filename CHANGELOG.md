@@ -1,3 +1,11 @@
+# Version 1.0.10
+
+* Update Fast TLS and p1_utils (Christophe Romain)
+
+# Version 1.0.9
+
+* Update Fast TLS (Mickaël Rémond)
+
 # Version 1.0.8
 
 * Use p1_utils 1.0.6 (Christophe Romain)
