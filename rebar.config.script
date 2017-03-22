@@ -1,8 +1,8 @@
 %%%----------------------------------------------------------------------
 %%% File    : rebar.config.script
-%%% Author  : Mickael Remond <mremond@process-one.net>
+%%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%% Purpose : Rebar build script. Compliant with rebar and rebar3.
-%%% Created : 24 Nov 2015 by Mickael Remond <mremond@process-one.net>
+%%% Created : 8 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%% Copyright (C) 2002-2017 ProcessOne, SARL. All Rights Reserved.
 %%%
@@ -20,58 +20,102 @@
 %%%
 %%%----------------------------------------------------------------------
 
-ModCfg0 = fun(F, Cfg, [Key|Tail], Op, Default) ->
-                 {OldVal,PartCfg} = case lists:keytake(Key, 1, Cfg) of
-                                        {value, {_, V1}, V2} -> {V1, V2};
-                                        false -> {if Tail == [] -> Default; true -> [] end, Cfg}
-                                    end,
-                 case Tail of
-                     [] ->
-                         [{Key, Op(OldVal)} | PartCfg];
-                     _ ->
-                         [{Key, F(F, OldVal, Tail, Op, Default)} | PartCfg]
-                 end
-         end,
-ModCfg = fun(Cfg, Keys, Op, Default) -> ModCfg0(ModCfg0, Cfg, Keys, Op, Default) end.
-
-%% Rebar3 support for hex.pm support:
-%% - Transform dependencies specification to use hex.pm packages:
-%%   deps of the form: {Name, _Vsn, {git, _URL, {tag, Version}}}
-%%     are expected to refer to package and are rewritten for rebar3 as:
-%%   {Name, Version}
-%% - Add rebar3_hex plugin
 IsRebar3 = case application:get_key(rebar, vsn) of
-               {ok, VSN} ->
-                   [VSN1 | _] = string:tokens(VSN, "-"),
-                   [Maj, Min, Patch] = string:tokens(VSN1, "."),
-                   (list_to_integer(Maj) >= 3);
-               undefined ->
-                   lists:keymember(mix, 1, application:loaded_applications())
-           end,
-Cfg2 = case IsRebar3 of
-           true ->
-               DepsFun = fun(DepsList) -> lists:map(fun({DepName,_, {git,_, {tag,Version}}}) ->
-                                                            {DepName, Version};
-                                                       (Dep) ->
-                                                            Dep
-                                                    end, DepsList)
-                         end,
-               RB1 = ModCfg(CONFIG, [deps], DepsFun, []),
-               ModCfg(RB1, [plugins], fun(V) -> V ++ [rebar3_hex] end, []);
-           false ->
-               CONFIG
-       end,
+	       {ok, VSN} ->
+		   [VSN1 | _] = string:tokens(VSN, "-"),
+		   [Maj, Min, Patch] = string:tokens(VSN1, "."),
+		   (list_to_integer(Maj) >= 3);
+	       undefined ->
+		   lists:keymember(mix, 1, application:loaded_applications())
+	   end,
 
-%% When running Travis test, upload test coverage result to coveralls:
-Config = case os:getenv("TRAVIS") of
-             "true" ->
-                 JobId = os:getenv("TRAVIS_JOB_ID"),
-                 Cfg3 = ModCfg(Cfg2, [deps], fun(V) -> [{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}}|V] end, []),
-                 ModCfg(Cfg3, [post_hooks], fun(V) -> V ++ [{eunit, "echo '\n%%! -pa .eunit/ deps/coveralls/ebin\nmain(_)->{ok,F}=file:open(\"erlang.json\",[write]),io:fwrite(F,\"~s\",[coveralls:convert_file(\".eunit/cover.coverdata\", \""++JobId++"\", \"travis-ci\")]).' > getcover.erl"},
-                                                                   {eunit, "escript ./getcover.erl"}] end, []);
-             _ ->
-                 Cfg2
-         end,
+JobId = case os:getenv("TRAVIS_JOB_ID") of false -> ""; V -> V end,
+
+ModCfg0 = fun(F, Cfg, [Key|Tail], Op, Default) ->
+		  {OldVal,PartCfg} = case lists:keytake(Key, 1, Cfg) of
+					 {value, {_, V1}, V2} -> {V1, V2};
+					 false -> {if Tail == [] -> Default; true -> [] end, Cfg}
+				     end,
+		  case Tail of
+		      [] ->
+			  [{Key, Op(OldVal)} | PartCfg];
+		      _ ->
+			  [{Key, F(F, OldVal, Tail, Op, Default)} | PartCfg]
+		  end
+	  end,
+	ModCfg = fun(Cfg, Keys, Op, Default) -> ModCfg0(ModCfg0, Cfg, Keys, Op,
+		  Default) end,
+
+	ModCfgS = fun(Cfg, Keys, Val) -> ModCfg0(ModCfg0, Cfg, Keys, fun(_V) ->
+		  Val end, "") end,
+
+
+FilterConfig = fun(F, Cfg, [{Path, true, ModFun, Default} | Tail]) ->
+		       F(F, ModCfg0(ModCfg0, Cfg, Path, ModFun, Default), Tail);
+		  (F, Cfg, [_ | Tail]) ->
+		       F(F, Cfg, Tail);
+		  (F, Cfg, []) ->
+		       Cfg
+	       end,
+
+AppendStr = fun(Append) ->
+		    fun("") ->
+			    Append;
+		       (Val) ->
+			    Val ++ " " ++ Append
+		    end
+	    end,
+AppendList = fun(Append) ->
+		     fun(Val) ->
+			     Val ++ Append
+		     end
+	     end,
+
+Rebar3DepsFilter = fun(DepsList) ->
+			   lists:map(fun({DepName,_, {git,_, {tag,Version}}}) ->
+					     {DepName, Version};
+					(Dep) ->
+					     Dep
+				     end, DepsList)
+		   end,
+
+GlobalDepsFilter = fun(Deps) ->
+			   DepNames = lists:map(fun({DepName, _, _}) -> DepName;
+						   ({DepName, _}) -> DepName
+						   end, Deps),
+			   lists:filtermap(fun(Dep) ->
+						 case code:lib_dir(Dep) of
+						     {error, _} ->
+							 {true,"Unable to locate dep '"++atom_to_list(Dep)++"' in system deps."};
+						     _ ->
+							 false
+						 end
+					 end, DepNames)
+		   end,
+
+Rules = [
+	 {[deps], IsRebar3,
+	  Rebar3DepsFilter, []},
+	 {[plugins], IsRebar3,
+	  AppendList([rebar3_hex, pc]), []},
+	 {[provider_hooks], IsRebar3,
+	  AppendList([{pre, [
+			     {compile, {pc, compile}},
+			     {clean, {pc, clean}}
+			    ]}]), []},
+	 {[deps], os:getenv("TRAVIS") == "true",
+	  AppendList([{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}}]), []},
+	 {[post_hooks], os:getenv("TRAVIS") == "true",
+	  AppendList([{eunit, "echo '\n%%! -pa .eunit/ deps/coveralls/ebin\nmain(_)->{ok,F}=file:open(\"erlang.json\",[write]),io:fwrite(F,\"~s\",[coveralls:convert_file(\".eunit/cover.coverdata\", \""++JobId++"\", \"travis-ci\",\"\")]).' > getcover.erl"},
+		      {eunit, "escript ./getcover.erl"}]), []},
+	 {[deps], os:getenv("USE_GLOBAL_DEPS") /= false,
+	  GlobalDepsFilter, []}
+	],
+
+
+Config = FilterConfig(FilterConfig, CONFIG, Rules),
+
+%io:format("Rules:~n~p~n~nCONFIG:~n~p~n~nConfig:~n~p~n", [Rules, CONFIG, Config]),
 
 Config.
 
