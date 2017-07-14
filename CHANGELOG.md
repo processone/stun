@@ -1,5 +1,6 @@
 # Version 1.0.13
 
+* Updating fast_tls to version 1.0.14.
 * Make test not crash on R20 (Paweł Chmielowski)
 
 # Version 1.0.12
