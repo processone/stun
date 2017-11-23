@@ -38,6 +38,7 @@
 
 init_test() ->
     ?assertEqual(ok, application:start(fast_tls)),
+    ?assertEqual(ok, application:start(p1_utils)),
     ?assertEqual(ok, application:start(stun)).
 
 mk_cert_test() ->
