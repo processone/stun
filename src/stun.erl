@@ -240,10 +240,9 @@ process(#state{auth = user} = State,
 		    Key = {User, Realm, Pass},
 		    case stun_codec:check_integrity(Msg, Key) of
 			true ->
-			    error_logger:info_msg(
-			      "accepted long-term STUN authentication "
-			      "for ~s@~s from ~s",
-			      [User, Realm, addr_to_str(State#state.peer)]),
+			    ?dbg("accepted long-term STUN authentication "
+                                 "for ~s@~s from ~s",
+                                 [User, Realm, addr_to_str(State#state.peer)]),
 			    process(NewState, Msg, Key);
 			false ->
 			    error_logger:info_msg(

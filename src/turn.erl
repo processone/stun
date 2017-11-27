@@ -147,10 +147,9 @@ wait_for_allocate(#stun{class = request,
 		    Lifetime = time_left(State#state.life_timer),
 		    AddrPort = State#state.addr,
 		    RelayAddr = {State#state.relay_ip, RelayPort},
-		    error_logger:info_msg(
-		       "created TURN allocation for ~s@~s from ~s: ~s",
-		       [State#state.username, State#state.realm,
-			addr_to_str(AddrPort), addr_to_str(RelayAddr)]),
+		    ?dbg("created TURN allocation for ~s@~s from ~s: ~s",
+                         [State#state.username, State#state.realm,
+                          addr_to_str(AddrPort), addr_to_str(RelayAddr)]),
 		    R = Resp#stun{class = response,
 				  'XOR-RELAYED-ADDRESS' = RelayAddr,
 				  'LIFETIME' = Lifetime,
@@ -223,13 +222,12 @@ active(#stun{class = request,
 			      TRef = erlang:start_timer(
 				       ?PERMISSION_LIFETIME, self(),
 				       {permission_timeout, Addr}),
-			      error_logger:info_msg(
-				"created/updated TURN permission for user "
-				"~s@~s from ~s: ~s <-> ~s",
-				[State#state.username, State#state.realm,
-				 addr_to_str(State#state.addr),
-				 addr_to_str(State#state.relay_addr),
-				 addr_to_str({Addr, _Port})]),
+			      ?dbg("created/updated TURN permission for user "
+                                   "~s@~s from ~s: ~s <-> ~s",
+                                   [State#state.username, State#state.realm,
+                                    addr_to_str(State#state.addr),
+                                    addr_to_str(State#state.relay_addr),
+                                    addr_to_str({Addr, _Port})]),
 			      ?DICT:store(Addr, {Channel, TRef}, Acc)
 		      end, State#state.permissions, XorPeerAddrs),
 	    NewState = State#state{permissions = Perms},
@@ -385,9 +383,8 @@ terminate(_Reason, _StateName, State) ->
 	undefined ->
 	    ok;
 	RAddrPort ->
-	    error_logger:info_msg(
-	      "deleting TURN allocation for ~s@~s from ~s: ~s",
-	      [Username, Realm, addr_to_str(AddrPort), addr_to_str(RAddrPort)])
+	    ?dbg("deleting TURN allocation for ~s@~s from ~s: ~s",
+                 [Username, Realm, addr_to_str(AddrPort), addr_to_str(RAddrPort)])
     end,
     if is_pid(State#state.owner) ->
 	    stun:stop(State#state.owner);
