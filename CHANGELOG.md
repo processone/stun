@@ -1,3 +1,7 @@
+# Version 1.0.17
+
+* Updating fast_tls to version 1.0.18.
+
 # Version 1.0.16
 
 * Updating fast_tls to version 1.0.17.
