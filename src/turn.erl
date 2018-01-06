@@ -382,9 +382,10 @@ terminate(_Reason, _StateName, State) ->
     case State#state.relay_addr of
 	undefined ->
 	    ok;
-	RAddrPort ->
+	_RAddrPort ->
 	    ?dbg("deleting TURN allocation for ~s@~s from ~s: ~s",
-                 [Username, Realm, addr_to_str(AddrPort), addr_to_str(RAddrPort)])
+                 [Username, Realm, addr_to_str(_AddrPort),
+		  addr_to_str(_RAddrPort)])
     end,
     if is_pid(State#state.owner) ->
 	    stun:stop(State#state.owner);
@@ -467,10 +468,12 @@ format_error({error, Reason}) ->
 	    Res
     end.
 
+-ifdef(debug).
 addr_to_str({Addr, Port}) ->
     [inet_parse:ntoa(Addr), $:, integer_to_list(Port)];
 addr_to_str(Addr) ->
     inet_parse:ntoa(Addr).
+-endif.
 
 cancel_timer(undefined) ->
     ok;
