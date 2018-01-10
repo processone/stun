@@ -1,3 +1,7 @@
+# Version 1.0.19
+
+* Updating fast_tls to version 1.0.19.
+
 # Version 1.0.18
 
 * Updating fast_tls to version 71250ae.
