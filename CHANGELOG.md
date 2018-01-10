@@ -1,5 +1,6 @@
 # Version 1.0.18
 
+* Updating fast_tls to version 71250ae.
 * Fix compilation warnings
 
 # Version 1.0.17
