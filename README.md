@@ -20,7 +20,7 @@ They are part of a more general negotiation technique know as
 To summarize:
 
 * A STUN server is used to get an external network address. It does
-  not serve as a relay for the mediat raffic.
+  not serve as a relay for the media traffic.
 * TURN servers are used to relay traffic if direct (peer to peer)
   connection fails.
 
