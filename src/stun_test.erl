@@ -355,9 +355,7 @@ recv(TLSSocket, Buf, true) ->
     end.
 
 mk_trid() ->
-    {A, B, C} = p1_time_compat:timestamp(),
-    random:seed(A, B, C),
-    random:uniform(1 bsl 96).
+    stun:rand_uniform(1 bsl 96).
 
 get_cert() ->
     <<"-----BEGIN CERTIFICATE-----

@@ -46,6 +46,9 @@
 %% gen_fsm states
 -export([session_established/2]).
 
+%% helper functions
+-export([rand_uniform/0, rand_uniform/1, rand_uniform/2]).
+
 -include("stun.hrl").
 
 -define(MAX_BUF_SIZE, 64*1024). %% 64kb
@@ -101,7 +104,6 @@ tcp_init(_Sock, Opts) ->
     Opts.
 
 udp_init(Sock, Opts) ->
-    seed(),
     prepare_state(Opts, Sock, {{0,0,0,0}, 0}, gen_udp).
 
 udp_recv(Sock, Addr, Port, Data, State) ->
@@ -120,7 +122,6 @@ udp_recv(Sock, Addr, Port, Data, State) ->
 init([Sock, Opts]) ->
     case inet:peername(Sock) of
 	{ok, Addr} ->
-	    seed(),
 	    TRef = erlang:start_timer(?TIMEOUT, self(), stop),
 	    SockMod = get_sockmod(Opts),
 	    State = prepare_state(Opts, Sock, Addr, SockMod),
@@ -597,7 +598,7 @@ clean_treap(Treap, CleanPriority) ->
 make_nonce(Addr, Nonces) ->
     Priority = now_priority(),
     {TS, _} = Priority,
-    Nonce = list_to_binary(integer_to_list(random:uniform(1 bsl 32))),
+    Nonce = list_to_binary(integer_to_list(rand_uniform(1 bsl 32))),
     NewNonces = clean_treap(Nonces, TS + ?NONCE_LIFETIME),
     {Nonce, treap:insert(Nonce, Priority, Addr, NewNonces)}.
 
@@ -642,12 +643,31 @@ maybe_starttls(Sock, fast_tls, CertFile, _PeerAddr) ->
 maybe_starttls(Sock, gen_tcp, _CertFile, _PeerAddr) ->
     {ok, Sock}.
 
-seed() ->
-    {A, B, C} = p1_time_compat:timestamp(),
-    random:seed(A, B, C).
-
 prepare_response(State, Msg) ->
     #stun{method = Msg#stun.method,
 	  magic = Msg#stun.magic,
 	  trid = Msg#stun.trid,
 	  'SOFTWARE' = State#state.server_name}.
+
+-define(THRESHOLD, 16#10000000000000000).
+
+-ifdef(RAND_UNIFORM).
+rand_uniform() ->
+    rand:uniform().
+
+rand_uniform(N) ->
+    rand:uniform(N).
+
+rand_uniform(N, M) ->
+    rand:uniform(M-N+1) + N-1.
+-else.
+
+rand_uniform() ->
+    crypto:rand_uniform(0, ?THRESHOLD)/?THRESHOLD.
+
+rand_uniform(N) ->
+    crypto:rand_uniform(1, N+1).
+
+rand_uniform(N, M) ->
+    crypto:rand_uniform(N, M+1).
+-endif.
