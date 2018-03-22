@@ -1,5 +1,7 @@
 # Version 1.0.21
 
+* Updating fast_tls to version 1.0.21.
+* Updating p1_utils to version 1.0.11.
 * Fix compilation with rebar3
 * Fix warning about deprecated random
 * Fix typo in README
