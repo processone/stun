@@ -1,3 +1,9 @@
+# Version 1.0.21
+
+* Fix compilation with rebar3
+* Fix warning about deprecated random
+* Fix typo in README
+
 # Version 1.0.20
 
 * Updating fast_tls to version 1.0.20.
