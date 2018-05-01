@@ -23,7 +23,7 @@
 
 -module(stun).
 
--define(GEN_FSM, gen_fsm).
+-define(GEN_FSM, p1_fsm).
 -behaviour(?GEN_FSM).
 
 %% API
