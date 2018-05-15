@@ -100,7 +100,7 @@ Rules = [
 	 {[deps], IsRebar3,
 	  Rebar3DepsFilter, []},
 	 {[plugins], IsRebar3,
-	  AppendList([rebar3_hex, pc]), []},
+	  AppendList([rebar3_hex]), []},
 	 {[erl_opts], RandUniform,
 	  AppendList([{d, 'RAND_UNIFORM'}]), []},
 	 {[deps], os:getenv("TRAVIS") == "true",
