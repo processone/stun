@@ -103,11 +103,6 @@ Rules = [
 	  AppendList([rebar3_hex, pc]), []},
 	 {[erl_opts], RandUniform,
 	  AppendList([{d, 'RAND_UNIFORM'}]), []},
-	 {[provider_hooks], IsRebar3,
-	  AppendList([{pre, [
-			     {compile, {pc, compile}},
-			     {clean, {pc, clean}}
-			    ]}]), []},
 	 {[deps], os:getenv("TRAVIS") == "true",
 	  AppendList([{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}}]), []},
 	 {[post_hooks], os:getenv("TRAVIS") == "true",
