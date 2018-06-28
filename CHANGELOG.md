@@ -1,3 +1,8 @@
+# Version 1.0.23
+
+* Use p1\_fsm instead of gen\_fsm
+* Remove unused dependency on port compiler
+
 # Version 1.0.22
 
 * Updating fast_tls to version a166f0e.
