@@ -270,7 +270,7 @@ active(#stun{class = request,
 		    ChanTRef = erlang:start_timer(
 				 ?CHANNEL_LIFETIME, self(),
 				 {channel_timeout, Channel}),
-		    Perms = ?DICT:store(Addr, {lists:append(Channels, [Channel]), PermTRef},
+		    Perms = ?DICT:store(Addr, {[Channel | Channels], PermTRef},
 					State#state.permissions),
 		    Chans = ?DICT:store(Channel, {AddrPort, ChanTRef},
 					State#state.channels),
@@ -320,28 +320,21 @@ check_channels(Channels,AddrPort,State) ->
 				false -> false
 			end
 		end, Channels),
-	case length(Found)>0 of
-		true -> lists:nth(1,Found);
-		false -> 0
-	end.
+	case Found of [First | _] -> First; _Other -> 0 end.
 
 find_channel(Addr, Port,State) ->
 	AddrPort = {Addr, Port},
 	case ?DICT:find(Addr, State#state.permissions) of
 		{ok, {Channels, _}} ->
 			check_channels(Channels,AddrPort,State);
-		error -> 0
+		error -> undefined
 	end.
 
 handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
     inet:setopts(Sock, [{active, once}]),
 	Channel = find_channel(Addr, Port, State),
-    case Channel>0 of
-		true -> 
-%%			?dbg("handle_info indication ok c, ~s",[addr_to_str({Addr, Port})]),
-			TurnMsg = #turn{channel = Channel, data = Data},
-			{next_state, StateName, send(State, TurnMsg)};
-		false ->
+    case Channel of
+		undefined ->
 %%			?dbg("handle_info indication ok u, ~s",[addr_to_str({Addr, Port})]),
 			Seq = State#state.seq,
 			Ind = #stun{class = indication,
@@ -349,7 +342,11 @@ handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
 				trid = Seq,
 				'XOR-PEER-ADDRESS' = [{Addr, Port}],
 				'DATA' = Data},
-			{next_state, StateName, send(State#state{seq = Seq+1}, Ind)}
+			{next_state, StateName, send(State#state{seq = Seq+1}, Ind)};
+		_ -> 
+%%			?dbg("handle_info indication ok c, ~s",[addr_to_str({Addr, Port})]),
+			TurnMsg = #turn{channel = Channel, data = Data},
+			{next_state, StateName, send(State, TurnMsg)}
     end;
 handle_info({timeout, _Tref, stop}, _StateName, State) ->
     {stop, normal, State};
