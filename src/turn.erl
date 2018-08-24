@@ -334,10 +334,6 @@ handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
     inet:setopts(Sock, [{active, once}]),
 	Channel = find_channel(Addr, Port, State),
     case Channel of
-		_ -> 
-%%			?dbg("handle_info indication ok c, ~s",[addr_to_str({Addr, Port})]),
-			TurnMsg = #turn{channel = Channel, data = Data},
-			{next_state, StateName, send(State, TurnMsg)};
 		undefined ->
 %%			?dbg("handle_info indication ok u, ~s",[addr_to_str({Addr, Port})]),
 			Seq = State#state.seq,
@@ -346,7 +342,11 @@ handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
 				trid = Seq,
 				'XOR-PEER-ADDRESS' = [{Addr, Port}],
 				'DATA' = Data},
-			{next_state, StateName, send(State#state{seq = Seq+1}, Ind)}
+			{next_state, StateName, send(State#state{seq = Seq+1}, Ind)};
+		_ -> 
+%%			?dbg("handle_info indication ok c, ~s",[addr_to_str({Addr, Port})]),
+			TurnMsg = #turn{channel = Channel, data = Data},
+			{next_state, StateName, send(State, TurnMsg)}
     end;
 handle_info({timeout, _Tref, stop}, _StateName, State) ->
     {stop, normal, State};
