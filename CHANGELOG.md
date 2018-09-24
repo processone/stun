@@ -1,3 +1,8 @@
+# Version 1.0.24
+
+* Updating fast_tls to version f36ea5b74526c2c1c9c38f8d473168d95804f59d.
+* Updating p1_utils to version 6ff85e8.
+
 # Version 1.0.23
 
 * Updating fast_tls to version 1.0.23.
