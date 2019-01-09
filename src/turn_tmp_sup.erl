@@ -5,7 +5,7 @@
 %%% Created : 3 May 2014 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
-%%% Copyright (C) 2002-2017 ProcessOne, SARL. All Rights Reserved.
+%%% Copyright (C) 2002-2019 ProcessOne, SARL. All Rights Reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
