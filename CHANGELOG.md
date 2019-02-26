@@ -1,3 +1,7 @@
+# Version 1.0.27
+
+* Add contribution guide
+
 # Version 1.0.26
 
 * Updating fast_tls to version 1.0.26.
