@@ -1,3 +1,7 @@
+# Version 1.0.31
+
+* Update copyright year
+
 # Version 1.0.30
 
 * Updating fast_tls to version 1.1.3.
