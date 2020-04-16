@@ -382,7 +382,7 @@ terminate(_Reason, _StateName, State) ->
 	    ok;
 	_RAddrPort ->
 	    ?dbg("deleting TURN allocation for ~s@~s from ~s: ~s",
-                 [Username, Realm, addr_to_str(_AddrPort),
+                 [Username, Realm, addr_to_str(AddrPort),
 		  addr_to_str(_RAddrPort)])
     end,
     if is_pid(State#state.owner) ->
