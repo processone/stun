@@ -441,7 +441,7 @@ allocate_addr(Addr, {Min, Max}) ->
 allocate_addr(_Addr, _Min, _Max, _Next, 0) ->
     {error, eaddrinuse};
 allocate_addr(Addr, Min, Max, Next, Count) ->
-    case gen_udp:open(Next, [{ip, Addr}, {active, once}, binary]) of
+    case gen_udp:open(Next, [binary, inet, {ip, Addr}, {active, once}]) of
 	{ok, Sock} ->
 	    case inet:sockname(Sock) of
 		{ok, {_, Port}} ->
