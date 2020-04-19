@@ -104,7 +104,7 @@ Rules = [
 	 {[erl_opts], RandUniform,
 	  AppendList([{d, 'RAND_UNIFORM'}]), []},
 	 {[deps], os:getenv("TRAVIS") == "true",
-	  AppendList([{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}}]), []},
+	  AppendList([{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", {tag, "v2.0.1"}}}]), []},
 	 {[post_hooks], os:getenv("TRAVIS") == "true",
 	  AppendList([{eunit, "echo '\n%%! -pa .eunit/ deps/coveralls/ebin\nmain(_)->{ok,F}=file:open(\"erlang.json\",[write]),io:fwrite(F,\"~s\",[coveralls:convert_file(\".eunit/cover.coverdata\", \""++JobId++"\", \"travis-ci\",\"\")]).' > getcover.erl"},
 		      {eunit, "escript ./getcover.erl"}]), []},
