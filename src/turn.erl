@@ -455,6 +455,8 @@ allocate_addr(Addr, Min, Max, Next, Count) ->
 	       true ->
 		    allocate_addr(Addr, Min, Max, Next+1, Count-1)
 	    end;
+	{error, eaddrnotavail} when is_tuple(Addr) ->
+	    allocate_addr(any, Min, Max, Next, Count);
 	Err ->
 	    Err
     end.
