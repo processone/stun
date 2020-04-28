@@ -1,3 +1,8 @@
+# Version 1.0.32
+
+* Make sure that 'turn\_ip' address is used for communicating with peer.
+* Make sure that opened socket uses ipv4.
+
 # Version 1.0.31
 
 * Updating fast_tls to version 1.1.4.
