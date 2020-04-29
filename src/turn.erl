@@ -49,7 +49,6 @@
 -define(DEFAULT_LIFETIME, 300000). %% 5 minutes
 -define(PERMISSION_LIFETIME, 300000). %% 5 minutes
 -define(CHANNEL_LIFETIME, 600000). %% 10 minutes
--define(DICT, dict).
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
 
@@ -62,8 +61,8 @@
 	 realm = <<"">>                 :: binary(),
 	 key = {<<"">>, <<"">>, <<"">>} :: {binary(), binary(), binary()},
 	 server_name = <<"">>           :: binary(),
-	 permissions = ?DICT:new(),
-	 channels = ?DICT:new(),
+	 permissions = #{}              :: map(),
+	 channels = #{}                 :: map(),
 	 max_permissions                :: non_neg_integer() | atom(),
 	 relay_ip = {127,0,0,1}         :: inet:ip_address(),
 	 min_port = 49152               :: non_neg_integer(),
@@ -203,7 +202,7 @@ active(#stun{class = request,
 	     'XOR-PEER-ADDRESS' = XorPeerAddrs,
 	     method = ?STUN_METHOD_CREATE_PERMISSION} = Msg, State) ->
     Resp = prepare_response(State, Msg),
-    PermLen = ?DICT:size(State#state.permissions) + length(XorPeerAddrs),
+    PermLen = maps:size(State#state.permissions) + length(XorPeerAddrs),
     if XorPeerAddrs == [] ->
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
@@ -211,7 +210,7 @@ active(#stun{class = request,
        PermLen < State#state.max_permissions ->
 	    Perms = lists:foldl(
 		      fun({Addr, _Port}, Acc) ->
-			      Channel = case ?DICT:find(Addr, Acc) of
+			      Channel = case maps:find(Addr, Acc) of
 					    {ok, {Chan, OldTRef}} ->
 						cancel_timer(OldTRef),
 						Chan;
@@ -227,7 +226,7 @@ active(#stun{class = request,
                                     addr_to_str(State#state.addr),
                                     addr_to_str(State#state.relay_addr),
                                     addr_to_str({Addr, _Port})]),
-			      ?DICT:store(Addr, {Channel, TRef}, Acc)
+			      maps:put(Addr, {Channel, TRef}, Acc)
 		      end, State#state.permissions, XorPeerAddrs),
 	    NewState = State#state{permissions = Perms},
 	    R = Resp#stun{class = response},
@@ -241,7 +240,7 @@ active(#stun{class = indication,
 	     method = ?STUN_METHOD_SEND,
 	     'XOR-PEER-ADDRESS' = [{Addr, Port}],
 	     'DATA' = Data}, State) when is_binary(Data) ->
-    case ?DICT:find(Addr, State#state.permissions) of
+    case maps:find(Addr, State#state.permissions) of
 	{ok, _} ->
 	    gen_udp:send(State#state.relay_sock, Addr, Port, Data);
 	error ->
@@ -255,26 +254,25 @@ active(#stun{class = request,
   when is_integer(Channel), Channel >= 16#4000, Channel =< 16#7ffe ->
     Resp = prepare_response(State, Msg),
     AddrPort = {Addr, Port},
-    case ?DICT:find(Channel, State#state.channels) of
+    case maps:find(Channel, State#state.channels) of
 	{ok, {AddrPort, OldTRef}} ->
 	    cancel_timer(OldTRef),
 	    TRef = erlang:start_timer(?CHANNEL_LIFETIME, self(),
 				      {channel_timeout, Channel}),
-	    Chans = ?DICT:store(Channel, {AddrPort, TRef},
-				State#state.channels),
+	    Chans = maps:put(Channel, {AddrPort, TRef}, State#state.channels),
 	    NewState = State#state{channels = Chans},
 	    R = Resp#stun{class = response},
 	    {next_state, active, send(NewState, R)};
 	error ->
-	    case ?DICT:find(Addr, State#state.permissions) of
+	    case maps:find(Addr, State#state.permissions) of
 		{ok, {undefined, PermTRef}} ->
 		    ChanTRef = erlang:start_timer(
 				 ?CHANNEL_LIFETIME, self(),
 				 {channel_timeout, Channel}),
-		    Perms = ?DICT:store(Addr, {Channel, PermTRef},
-					State#state.permissions),
-		    Chans = ?DICT:store(Channel, {AddrPort, ChanTRef},
-					State#state.channels),
+		    Perms = maps:put(Addr, {Channel, PermTRef},
+				     State#state.permissions),
+		    Chans = maps:put(Channel, {AddrPort, ChanTRef},
+				     State#state.channels),
 		    NewState = State#state{channels = Chans,
 					   permissions = Perms},
 		    R = Resp#stun{class = response},
@@ -292,7 +290,7 @@ active(#stun{class = request,
 		  'ERROR-CODE' = stun_codec:error(400)},
     {next_state, active, send(State, R)};
 active(#turn{channel = Channel, data = Data}, State) ->
-    case ?DICT:find(Channel, State#state.channels) of
+    case maps:find(Channel, State#state.channels) of
 	{ok, {{Addr, Port}, _}} ->
 	    gen_udp:send(State#state.relay_sock,
 			 Addr, Port, Data),
@@ -315,7 +313,7 @@ handle_sync_event(_Event, _From, StateName, State) ->
 
 handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
     inet:setopts(Sock, [{active, once}]),
-    case ?DICT:find(Addr, State#state.permissions) of
+    case maps:find(Addr, State#state.permissions) of
 	{ok, {undefined, _}} ->
 	    Seq = State#state.seq,
 	    Ind = #stun{class = indication,
@@ -335,13 +333,13 @@ handle_info({timeout, _Tref, stop}, _StateName, State) ->
 handle_info({timeout, _Tref, {permission_timeout, Addr}},
 	    StateName, State) ->
     ?dbg("permission for ~s timed out", [Addr]),
-    case ?DICT:find(Addr, State#state.permissions) of
+    case maps:find(Addr, State#state.permissions) of
 	{ok, {Channel, _}} ->
-	    Perms = ?DICT:erase(Addr, State#state.permissions),
-	    Chans = case ?DICT:find(Channel, State#state.channels) of
+	    Perms = maps:remove(Addr, State#state.permissions),
+	    Chans = case maps:find(Channel, State#state.channels) of
 			{ok, {_, TRef}} ->
 			    cancel_timer(TRef),
-			    ?DICT:erase(Channel, State#state.channels);
+			    maps:remove(Channel, State#state.channels);
 			error ->
 			    State#state.channels
 		    end,
@@ -353,13 +351,13 @@ handle_info({timeout, _Tref, {permission_timeout, Addr}},
 handle_info({timeout, _Tref, {channel_timeout, Channel}},
 	    StateName, State) ->
     ?dbg("channel ~p timed out", [Channel]),
-    case ?DICT:find(Channel, State#state.channels) of
+    case maps:find(Channel, State#state.channels) of
 	{ok, {{Addr, _Port}, _}} ->
-	    Chans = ?DICT:erase(Channel, State#state.channels),
-	    Perms = case ?DICT:find(Addr, State#state.permissions) of
+	    Chans = maps:remove(Channel, State#state.channels),
+	    Perms = case maps:find(Addr, State#state.permissions) of
 			{ok, {_, TRef}} ->
-			    ?DICT:store(Addr, {undefined, TRef},
-					State#state.permissions);
+			    maps:put(Addr, {undefined, TRef},
+				     State#state.permissions);
 			error ->
 			    State#state.permissions
 		    end,
