@@ -114,8 +114,8 @@ encode(#stun{class = Class,
 
 add_fingerprint(<<T:16, L:16, Tail/binary>>) ->
     Data = <<T:16, (L+8):16, Tail/binary>>,
-    CRC32 = erlang:crc32(Data),
-    <<Data/binary, ?STUN_ATTR_FINGERPRINT:16, 4:16, CRC32:32>>.
+    Fingerprint = erlang:crc32(Data) bxor 16#5354554e,
+    <<Data/binary, ?STUN_ATTR_FINGERPRINT:16, 4:16, Fingerprint:32>>.
 
 check_integrity(#stun{raw = Raw, 'MESSAGE-INTEGRITY' = MI}, Key)
   when is_binary(Raw), is_binary(MI), Key /= undefined ->
