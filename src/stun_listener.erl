@@ -33,7 +33,7 @@
          terminate/2, code_change/3]).
 
 -define(TCP_SEND_TIMEOUT, 10000).
--record(state, {listeners = dict:new()}).
+-record(state, {listeners = #{}}).
 
 %%%===================================================================
 %%% API
@@ -54,7 +54,7 @@ init([]) ->
     {ok, #state{}}.
 
 handle_call({add_listener, Port, Transport, Opts}, _From, State) ->
-    case dict:find({Port, Transport}, State#state.listeners) of
+    case maps:find({Port, Transport}, State#state.listeners) of
 	{ok, _} ->
 	    Err = {error, already_started},
 	    {reply, Err, State};
@@ -72,7 +72,7 @@ handle_call({add_listener, Port, Transport, Opts}, _From, State) ->
 			    format_listener_error(Port, Transport, Opts, Err),
 			    {reply, Reply, State};
 			ok ->
-			    Listeners = dict:store(
+			    Listeners = maps:put(
 					  {Port, Transport}, {MRef, Pid, Opts},
 					  State#state.listeners),
 			    {reply, ok, State#state{listeners = Listeners}}
@@ -80,11 +80,11 @@ handle_call({add_listener, Port, Transport, Opts}, _From, State) ->
 	    end
     end;
 handle_call({del_listener, Port, Transport}, _From, State) ->
-    case dict:find({Port, Transport}, State#state.listeners) of
+    case maps:find({Port, Transport}, State#state.listeners) of
 	{ok, {MRef, Pid, _Opts}} ->
 	    catch erlang:demonitor(MRef, [flush]),
 	    catch exit(Pid, kill),
-	    Listeners = dict:erase({Port, Transport}, State#state.listeners),
+	    Listeners = maps:remove({Port, Transport}, State#state.listeners),
 	    {reply, ok, State#state{listeners = Listeners}};
 	error ->
 	    {reply, {error, notfound}, State}
@@ -97,7 +97,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({'DOWN', MRef, _Type, _Pid, Info}, State) ->
-    Listeners = dict:filter(
+    Listeners = maps:filter(
 		  fun({Port, Transport}, {Ref, _, _}) when Ref == MRef ->
 			  error_logger:error_msg("listener on ~p/~p failed: ~p",
 						 [Port, Transport, Info]),
