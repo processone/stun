@@ -46,7 +46,7 @@
 -endif.
 
 -define(MAX_LIFETIME, 3600000). %% 1 hour
--define(DEFAULT_LIFETIME, 300000). %% 5 minutes
+-define(DEFAULT_LIFETIME, 600000). %% 10 minutes
 -define(PERMISSION_LIFETIME, 300000). %% 5 minutes
 -define(CHANNEL_LIFETIME, 600000). %% 10 minutes
 
