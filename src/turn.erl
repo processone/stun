@@ -61,8 +61,9 @@
 	 realm = <<"">>                 :: binary(),
 	 key = {<<"">>, <<"">>, <<"">>} :: {binary(), binary(), binary()},
 	 server_name = <<"">>           :: binary(),
-	 permissions = #{}              :: map(),
+	 peers = #{}                    :: map(),
 	 channels = #{}                 :: map(),
+	 permissions = #{}              :: map(),
 	 max_permissions                :: non_neg_integer() | atom(),
 	 relay_ip = {127,0,0,1}         :: inet:ip_address(),
 	 min_port = 49152               :: non_neg_integer(),
@@ -201,39 +202,15 @@ active(#stun{class = request,
 active(#stun{class = request,
 	     'XOR-PEER-ADDRESS' = XorPeerAddrs,
 	     method = ?STUN_METHOD_CREATE_PERMISSION} = Msg, State) ->
+    {Addrs, _Ports} = lists:unzip(XorPeerAddrs),
     Resp = prepare_response(State, Msg),
-    PermLen = maps:size(State#state.permissions) + length(XorPeerAddrs),
-    if XorPeerAddrs == [] ->
-	    R = Resp#stun{class = error,
-			  'ERROR-CODE' = stun_codec:error(400)},
-	    {next_state, active, send(State, R)};
-       PermLen < State#state.max_permissions ->
-	    Perms = lists:foldl(
-		      fun({Addr, _Port}, Acc) ->
-			      Channel = case maps:find(Addr, Acc) of
-					    {ok, {Chan, OldTRef}} ->
-						cancel_timer(OldTRef),
-						Chan;
-					    error ->
-						undefined
-					end,
-			      TRef = erlang:start_timer(
-				       ?PERMISSION_LIFETIME, self(),
-				       {permission_timeout, Addr}),
-			      ?dbg("created/updated TURN permission for user "
-                                   "~s@~s from ~s: ~s <-> ~s",
-                                   [State#state.username, State#state.realm,
-                                    addr_to_str(State#state.addr),
-                                    addr_to_str(State#state.relay_addr),
-                                    addr_to_str({Addr, _Port})]),
-			      maps:put(Addr, {Channel, TRef}, Acc)
-		      end, State#state.permissions, XorPeerAddrs),
-	    NewState = State#state{permissions = Perms},
+    case update_permissions(State, Addrs) of
+	{ok, NewState} ->
 	    R = Resp#stun{class = response},
 	    {next_state, active, send(NewState, R)};
-       true ->
+	{error, Code} ->
 	    R = Resp#stun{class = error,
-			  'ERROR-CODE' = stun_codec:error(508)},
+			  'ERROR-CODE' = stun_codec:error(Code)},
 	    {next_state, active, send(State, R)}
     end;
 active(#stun{class = indication,
@@ -249,37 +226,40 @@ active(#stun{class = indication,
     {next_state, active, State};
 active(#stun{class = request,
 	     'CHANNEL-NUMBER' = Channel,
-	     'XOR-PEER-ADDRESS' = [{Addr, Port}],
+	     'XOR-PEER-ADDRESS' = [{Addr, _Port} = Peer],
 	     method = ?STUN_METHOD_CHANNEL_BIND} = Msg, State)
   when is_integer(Channel), Channel >= 16#4000, Channel =< 16#7ffe ->
     Resp = prepare_response(State, Msg),
-    AddrPort = {Addr, Port},
-    case maps:find(Channel, State#state.channels) of
-	{ok, {AddrPort, OldTRef}} ->
-	    cancel_timer(OldTRef),
-	    TRef = erlang:start_timer(?CHANNEL_LIFETIME, self(),
-				      {channel_timeout, Channel}),
-	    Chans = maps:put(Channel, {AddrPort, TRef}, State#state.channels),
-	    NewState = State#state{channels = Chans},
-	    R = Resp#stun{class = response},
-	    {next_state, active, send(NewState, R)};
-	error ->
-	    case maps:find(Addr, State#state.permissions) of
-		{ok, {undefined, PermTRef}} ->
-		    ChanTRef = erlang:start_timer(
-				 ?CHANNEL_LIFETIME, self(),
-				 {channel_timeout, Channel}),
-		    Perms = maps:put(Addr, {Channel, PermTRef},
-				     State#state.permissions),
-		    Chans = maps:put(Channel, {AddrPort, ChanTRef},
+    case {maps:find(Channel, State#state.channels),
+	  maps:find(Peer, State#state.peers)} of
+	{_, {ok, OldChannel}} when Channel /= OldChannel ->
+	    R = Resp#stun{class = error,
+			  'ERROR-CODE' = stun_codec:error(400)},
+	    {next_state, active, send(State, R)};
+	{{ok, {OldPeer, _}}, _} when Peer /= OldPeer ->
+	    R = Resp#stun{class = error,
+			  'ERROR-CODE' = stun_codec:error(400)},
+	    {next_state, active, send(State, R)};
+	{FindResult, _} ->
+	    case update_permissions(State, [Addr]) of
+		{ok, NewState0} ->
+		    case FindResult of
+			{ok, {_, OldTRef}} ->
+			    cancel_timer(OldTRef);
+			_ ->
+			    ok
+		    end,
+		    TRef = erlang:start_timer(?CHANNEL_LIFETIME, self(),
+					      {channel_timeout, Channel}),
+		    Peers = maps:put(Peer, Channel, State#state.peers),
+		    Chans = maps:put(Channel, {Peer, TRef},
 				     State#state.channels),
-		    NewState = State#state{channels = Chans,
-					   permissions = Perms},
+		    NewState = NewState0#state{peers = Peers, channels = Chans},
 		    R = Resp#stun{class = response},
 		    {next_state, active, send(NewState, R)};
-		_ ->
+		{error, Code} ->
 		    R = Resp#stun{class = error,
-				  'ERROR-CODE' = stun_codec:error(400)},
+				  'ERROR-CODE' = stun_codec:error(Code)},
 		    {next_state, active, send(State, R)}
 	    end
     end;
@@ -313,19 +293,21 @@ handle_sync_event(_Event, _From, StateName, State) ->
 
 handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
     inet:setopts(Sock, [{active, once}]),
-    case maps:find(Addr, State#state.permissions) of
-	{ok, {undefined, _}} ->
+    Peer = {Addr, Port},
+    case {maps:find(Addr, State#state.permissions),
+	  maps:find(Peer, State#state.peers)} of
+	{{ok, _}, {ok, Channel}} ->
+	    TurnMsg = #turn{channel = Channel, data = Data},
+	    {next_state, StateName, send(State, TurnMsg)};
+	{{ok, _}, error} ->
 	    Seq = State#state.seq,
 	    Ind = #stun{class = indication,
 			method = ?STUN_METHOD_DATA,
 			trid = Seq,
-			'XOR-PEER-ADDRESS' = [{Addr, Port}],
+			'XOR-PEER-ADDRESS' = [Peer],
 			'DATA' = Data},
 	    {next_state, StateName, send(State#state{seq = Seq+1}, Ind)};
-	{ok, {Channel, _}} ->
-	    TurnMsg = #turn{channel = Channel, data = Data},
-	    {next_state, StateName, send(State, TurnMsg)};
-	error ->
+	{error, _} ->
 	    {next_state, StateName, State}
     end;
 handle_info({timeout, _Tref, stop}, _StateName, State) ->
@@ -334,17 +316,9 @@ handle_info({timeout, _Tref, {permission_timeout, Addr}},
 	    StateName, State) ->
     ?dbg("permission for ~s timed out", [Addr]),
     case maps:find(Addr, State#state.permissions) of
-	{ok, {Channel, _}} ->
+	{ok, _} ->
 	    Perms = maps:remove(Addr, State#state.permissions),
-	    Chans = case maps:find(Channel, State#state.channels) of
-			{ok, {_, TRef}} ->
-			    cancel_timer(TRef),
-			    maps:remove(Channel, State#state.channels);
-			error ->
-			    State#state.channels
-		    end,
-	    {next_state, StateName, State#state{permissions = Perms,
-						channels = Chans}};
+	    {next_state, StateName, State#state{permissions = Perms}};
 	error ->
 	    {next_state, StateName, State}
     end;
@@ -352,17 +326,11 @@ handle_info({timeout, _Tref, {channel_timeout, Channel}},
 	    StateName, State) ->
     ?dbg("channel ~p timed out", [Channel]),
     case maps:find(Channel, State#state.channels) of
-	{ok, {{Addr, _Port}, _}} ->
+	{ok, {Peer, _}} ->
 	    Chans = maps:remove(Channel, State#state.channels),
-	    Perms = case maps:find(Addr, State#state.permissions) of
-			{ok, {_, TRef}} ->
-			    maps:put(Addr, {undefined, TRef},
-				     State#state.permissions);
-			error ->
-			    State#state.permissions
-		    end,
+	    Peers = maps:remove(Peer, State#state.peers),
 	    {next_state, StateName, State#state{channels = Chans,
-						permissions = Perms}};
+						peers = Peers}};
 	error ->
 	    {next_state, StateName, State}
     end;
@@ -397,6 +365,33 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+update_permissions(_State, []) ->
+    {error, 400};
+update_permissions(#state{permissions = Perms, max_permissions = Max}, Addrs)
+  when map_size(Perms) + length(Addrs) > Max ->
+    {error, 508};
+update_permissions(State, Addrs) ->
+    Perms = lists:foldl(
+	      fun(Addr, Acc) ->
+		      case maps:find(Addr, Acc) of
+			  {ok, OldTRef} ->
+			      cancel_timer(OldTRef);
+			  error ->
+			      ok
+		      end,
+		      TRef = erlang:start_timer(
+			       ?PERMISSION_LIFETIME, self(),
+			       {permission_timeout, Addr}),
+		      ?dbg("created/updated TURN permission for user "
+			   "~s@~s from ~s: ~s <-> ~s",
+			   [State#state.username, State#state.realm,
+			    addr_to_str(State#state.addr),
+			    addr_to_str(State#state.relay_addr),
+			    addr_to_str(Addr)]),
+		      maps:put(Addr, TRef, Acc)
+	      end, State#state.permissions, Addrs),
+    {ok, State#state{permissions = Perms}}.
+
 send(State, Pkt) when is_binary(Pkt) ->
     SockMod = State#state.sock_mod,
     Sock = State#state.sock,
