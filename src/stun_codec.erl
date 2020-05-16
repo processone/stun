@@ -145,8 +145,10 @@ error(405) -> {405, <<"Method Not Allowed">>};
 error(420) -> {420, <<"Unknown Attribute">>};
 error(437) -> {437, <<"Allocation Mismatch">>};
 error(438) -> {438, <<"Stale Nonce">>};
+error(440) -> {440, <<"Address Family not Supported">>};
 error(441) -> {441, <<"Wrong Credentials">>};
 error(442) -> {442, <<"Unsupported Transport Protocol">>};
+error(443) -> {443, <<"Peer Address Family Mismatch">>};
 error(486) -> {486, <<"Allocation Quota Reached">>};
 error(500) -> {500, <<"Server Error">>};
 error(508) -> {508, <<"Insufficient Capacity">>};
@@ -193,6 +195,7 @@ enc_attrs(Msg) ->
 		    Msg#stun.'XOR-RELAYED-ADDRESS'),
        enc_xor_peer_addr(Msg#stun.magic, Msg#stun.trid,
 			 Msg#stun.'XOR-PEER-ADDRESS'),
+       enc_req_family(Msg#stun.'REQUESTED-ADDRESS-FAMILY'),
        enc_req_trans(Msg#stun.'REQUESTED-TRANSPORT'),
        enc_attr(?STUN_ATTR_DATA, Msg#stun.'DATA'),
        enc_df(Msg#stun.'DONT-FRAGMENT'),
@@ -242,6 +245,12 @@ dec_attr(?STUN_ATTR_XOR_PEER_ADDRESS, Val, Msg) ->
     AddrPort = dec_xor_addr(Val, Msg),
     Tail = Msg#stun.'XOR-PEER-ADDRESS',
     Msg#stun{'XOR-PEER-ADDRESS' = [AddrPort|Tail]};
+dec_attr(?STUN_ATTR_REQUESTED_ADDRESS_FAMILY, Val, Msg) ->
+    Family = case Val of
+		 <<1:8, _:3/binary>> -> ipv4;
+		 <<2:8, _:3/binary>> -> ipv6
+	     end,
+    Msg#stun{'REQUESTED-ADDRESS-FAMILY' = Family};
 dec_attr(?STUN_ATTR_REQUESTED_TRANSPORT, Val, Msg) ->
     <<ProtoInt, _:3/binary>> = Val,
     Proto = case ProtoInt of
@@ -342,6 +351,13 @@ enc_uint32(_Type, undefined) ->
     <<>>;
 enc_uint32(Type, Seconds) ->
     enc_attr(Type, <<Seconds:32>>).
+
+enc_req_family(undefined) ->
+    <<>>;
+enc_req_family(ipv4) ->
+    enc_attr(?STUN_ATTR_REQUESTED_ADDRESS_FAMILY, <<1, 0:24>>);
+enc_req_family(ipv6) ->
+    enc_attr(?STUN_ATTR_REQUESTED_ADDRESS_FAMILY, <<2, 0:24>>).
 
 enc_req_trans(undefined) ->
     <<>>;

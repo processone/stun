@@ -72,7 +72,8 @@
 	 peer = {{0,0,0,0}, 0}       :: addr(),
 	 tref = make_ref()           :: reference(),
 	 use_turn = false            :: boolean(),
-	 relay_ip = {127,0,0,1}      :: inet:ip_address(),
+	 relay_v4_ip = {127,0,0,1}   :: inet:ip4_address(),
+	 relay_v6_ip                 :: inet:ip6_address(),
 	 min_port = 49152            :: non_neg_integer(),
 	 max_port = 65535            :: non_neg_integer(),
 	 max_allocs = 10             :: non_neg_integer() | infinity,
@@ -325,7 +326,8 @@ process(State, #stun{class = request,
 		    {max_allocs, State#state.max_allocs},
 		    {max_permissions, State#state.max_permissions},
 		    {addr, AddrPort},
-		    {relay_ip, State#state.relay_ip},
+		    {relay_v4_ip, State#state.relay_v4_ip},
+		    {relay_v6_ip, State#state.relay_v6_ip},
 		    {min_port, State#state.min_port},
 		    {max_port, State#state.max_port} |
 		    if SockMod /= gen_udp ->
@@ -453,9 +455,31 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 	      fun({turn_ip, IP}, State) ->
 		      case prepare_addr(IP) of
 			  {ok, Addr} ->
-			      State#state{relay_ip = Addr};
+			      error_logger:error_msg("'turn_ip' is deprecated, "
+						     "specify 'turn_v4_ip' and "
+						     "optionally 'turn_v6_ip' "
+						     "instead", []),
+			      State#state{relay_v4_ip = Addr};
 			  {error, _} ->
 			      error_logger:error_msg("wrong 'turn_ip' "
+						     "value: ~p", [IP]),
+			      State
+		      end;
+		 ({turn_v4_ip, IP}, State) ->
+		      case prepare_addr(IP) of
+			  {ok, Addr} ->
+			      State#state{relay_v4_ip = Addr};
+			  {error, _} ->
+			      error_logger:error_msg("wrong 'turn_v4_ip' "
+						     "value: ~p", [IP]),
+			      State
+		      end;
+		 ({turn_v6_ip, IP}, State) ->
+		      case prepare_addr(IP) of
+			  {ok, Addr} ->
+			      State#state{relay_v6_ip = Addr};
+			  {error, _} ->
+			      error_logger:error_msg("wrong 'turn_v6_ip' "
 						     "value: ~p", [IP]),
 			      State
 		      end;
