@@ -144,7 +144,7 @@ wait_for_allocate(#stun{class = request,
 			       {State#state.min_port, State#state.max_port}) of
 		{ok, RelayPort, RelaySock} ->
 		    Lifetime = time_left(State#state.life_timer),
-		    AddrPort = State#state.addr,
+		    AddrPort = stun:unmap_v4_addr(State#state.addr),
 		    RelayAddr = {State#state.relay_ip, RelayPort},
 		    ?dbg("created TURN allocation for ~s@~s from ~s: ~s",
                          [State#state.username, State#state.realm,
@@ -463,7 +463,9 @@ format_error({error, Reason}) ->
     end.
 
 -ifdef(debug).
-addr_to_str({Addr, Port}) ->
+addr_to_str({{_, _, _, _, _, _, _, _} = Addr, Port}) ->
+    [$[, inet_parse:ntoa(Addr), $], $:, integer_to_list(Port)];
+addr_to_str({{_, _, _, _} = Addr, Port}) ->
     [inet_parse:ntoa(Addr), $:, integer_to_list(Port)];
 addr_to_str(Addr) ->
     inet_parse:ntoa(Addr).

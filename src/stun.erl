@@ -47,7 +47,7 @@
 -export([session_established/2]).
 
 %% helper functions
--export([rand_uniform/0, rand_uniform/1, rand_uniform/2]).
+-export([rand_uniform/0, rand_uniform/1, rand_uniform/2, unmap_v4_addr/1]).
 
 -include("stun.hrl").
 
@@ -292,7 +292,7 @@ process(State, #stun{class = request, unsupported = [_|_]} = Msg, Secret) ->
 process(State, #stun{class = request,
 		     method = ?STUN_METHOD_BINDING} = Msg, Secret) ->
     Resp = prepare_response(State, Msg),
-    AddrPort = State#state.peer,
+    AddrPort = unmap_v4_addr(State#state.peer),
     R = case stun_codec:version(Msg) of
 	    old ->
 		Resp#stun{class = response, 'MAPPED-ADDRESS' = AddrPort};
@@ -613,7 +613,14 @@ have_nonce(Nonce, Nonces) ->
 	    {false, NewNonces}
     end.
 
-addr_to_str({Addr, Port}) ->
+unmap_v4_addr({{0, 0, 0, 0, 0, 16#FFFF, D7, D8}, Port}) ->
+    {{D7 bsr 8, D7 band 255, D8 bsr 8, D8 band 255}, Port};
+unmap_v4_addr(AddrPort) ->
+    AddrPort.
+
+addr_to_str({{_, _, _, _, _, _, _, _} = Addr, Port}) ->
+    [$[, inet_parse:ntoa(Addr), $], $:, integer_to_list(Port)];
+addr_to_str({{_, _, _, _} = Addr, Port}) ->
     [inet_parse:ntoa(Addr), $:, integer_to_list(Port)];
 addr_to_str(Addr) ->
     inet_parse:ntoa(Addr).
