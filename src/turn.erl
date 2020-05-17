@@ -74,7 +74,9 @@
 	 last_trid                      :: non_neg_integer(),
 	 last_pkt = <<>>                :: binary(),
 	 seq = 1                        :: non_neg_integer(),
-	 life_timer                     :: reference()}).
+	 life_timer                     :: reference(),
+	 blacklist                      :: [{inet:ip_address(),
+					     inet:ip_address()}]}).
 
 %%====================================================================
 %% API
@@ -107,6 +109,7 @@ init([Opts]) ->
 		   min_port = proplists:get_value(min_port, Opts),
 		   max_port = proplists:get_value(max_port, Opts),
 		   max_permissions = proplists:get_value(max_permissions, Opts),
+		   blacklist = proplists:get_value(blacklist, Opts),
 		   server_name = proplists:get_value(server_name, Opts),
 		   realm = Realm, addr = AddrPort,
 		   username = Username, owner = Owner},
@@ -132,6 +135,7 @@ wait_for_allocate(#stun{class = request,
 		 ipv4 -> inet;
 		 ipv6 -> inet6
 	     end,
+    IsBlacklisted = blacklisted(State),
     Resp = prepare_response(State, Msg),
     if Msg#stun.'REQUESTED-TRANSPORT' == undefined ->
 	    R = Resp#stun{class = error,
@@ -149,6 +153,10 @@ wait_for_allocate(#stun{class = request,
        Family == inet6, State#state.relay_v6_ip == undefined ->
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(440)},
+	    {stop, normal, send(State, R)};
+       IsBlacklisted ->
+	    R = Resp#stun{class = error,
+			  'ERROR-CODE' = stun_codec:error(403)},
 	    {stop, normal, send(State, R)};
        true ->
 	    RelayIP = case Family of
@@ -402,8 +410,8 @@ update_permissions(#state{permissions = Perms, max_permissions = Max}, Addrs)
   when map_size(Perms) + length(Addrs) > Max ->
     {error, 508};
 update_permissions(#state{relay_addr = {IP, _}} = State, Addrs) ->
-    case families_match(IP, Addrs) of
-	true ->
+    case {families_match(IP, Addrs), blacklisted(State, Addrs)} of
+	{true, false} ->
 	    Perms = lists:foldl(
 		      fun(Addr, Acc) ->
 			      case maps:find(Addr, Acc) of
@@ -424,8 +432,10 @@ update_permissions(#state{relay_addr = {IP, _}} = State, Addrs) ->
 			      maps:put(Addr, TRef, Acc)
 		      end, State#state.permissions, Addrs),
 	    {ok, State#state{permissions = Perms}};
-	false ->
-	    {error, 443}
+	{false, _} ->
+	    {error, 443};
+	{_, true} ->
+	    {error, 403}
     end.
 
 send(State, Pkt) when is_binary(Pkt) ->
@@ -498,6 +508,38 @@ family_matches({_, _, _, _}, {_, _, _, _}) ->
 family_matches({_, _, _, _, _, _, _, _}, {_, _, _, _, _, _, _, _}) ->
     true;
 family_matches(_Addr1, _Addr2) ->
+    false.
+
+blacklisted(#state{addr = {IP, _Port}} = State) ->
+    blacklisted(State, [IP]).
+
+blacklisted(#state{blacklist = Blacklist}, IPs) ->
+    lists:any(
+      fun(IP) ->
+	      lists:any(
+		fun(Entry) ->
+			matches_ip(Entry, IP)
+		end, Blacklist)
+      end, IPs).
+
+matches_ip(IP, IP) ->
+    true;
+matches_ip({{S1, S2, S3, S4}, {E1, E2, E3, E4}}, {I1, I2, I3, I4}) ->
+    (((I1 >= S1) and (I1 =< E1)) and
+     ((I2 >= S2) and (I2 =< E2)) and
+     ((I3 >= S3) and (I3 =< E3)) and
+     ((I4 >= S4) and (I4 =< E4)));
+matches_ip({{S1, S2, S3, S4, S5, S6, S7, S8}, {E1, E2, E3, E4, E5, E6, E7, E8}},
+	    {I1, I2, I3, I4, I5, I6, I7, I8}) ->
+    (((I1 >= S1) and (I1 =< E1)) and
+     ((I2 >= S2) and (I2 =< E2)) and
+     ((I3 >= S3) and (I3 =< E3)) and
+     ((I4 >= S4) and (I4 =< E4)) and
+     ((I5 >= S5) and (I5 =< E5)) and
+     ((I6 >= S6) and (I6 =< E6)) and
+     ((I7 >= S7) and (I7 =< E7)) and
+     ((I8 >= S8) and (I8 =< E8)));
+matches_ip(_, _) ->
     false.
 
 format_error({error, Reason}) ->

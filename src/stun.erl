@@ -55,6 +55,11 @@
 -define(TIMEOUT, 60000). %% 1 minute
 -define(NONCE_LIFETIME, 60*1000*1000). %% 1 minute (in usec)
 -define(SERVER_NAME, <<"P1 STUN library">>).
+%% RFC 6156, 9.1: "a TURN relay MUST NOT accept Teredo or 6to4 addresses".
+-define(BLACKLIST, [{{8193, 0, 0, 0, 0, 0, 0, 0}, % 2001::/32 (Teredo).
+		     {8193, 00000, 65535, 65535, 65535, 65535, 65535, 65535}},
+		    {{8194, 0, 0, 0, 0, 0, 0, 0}, % 2002::/16 (6to4).
+		     {8194, 65535, 65535, 65535, 65535, 65535, 65535, 65535}}]).
 
 %%-define(debug, true).
 -ifdef(debug).
@@ -64,6 +69,8 @@
 -endif.
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
+-type blacklist() :: [inet:ip_address() |
+		      {inet:ip_address(), inet:ip_address()}].
 
 -record(state,
 	{sock                        :: inet:socket() | fast_tls:tls_socket(),
@@ -79,6 +86,7 @@
 	 max_allocs = 10             :: non_neg_integer() | infinity,
 	 shaper = none               :: stun_shaper:shaper(),
 	 max_permissions = 10        :: non_neg_integer() | infinity,
+	 blacklist = ?BLACKLIST      :: blacklist(),
 	 auth = user                 :: anonymous | user,
 	 nonces = treap:empty()      :: treap:treap(),
 	 realm = <<"">>              :: binary(),
@@ -325,6 +333,7 @@ process(State, #stun{class = request,
 		    {server, State#state.server_name},
 		    {max_allocs, State#state.max_allocs},
 		    {max_permissions, State#state.max_permissions},
+		    {blacklist, State#state.blacklist},
 		    {addr, AddrPort},
 		    {relay_v4_ip, State#state.relay_v4_ip},
 		    {relay_v6_ip, State#state.relay_v6_ip},
@@ -507,6 +516,20 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 ({turn_max_permissions, N}, State)
 		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
 		      State#state{max_permissions = N};
+		 ({turn_blacklist, B}, State) ->
+		      try
+			  lists:foreach(fun({S, E}) ->
+						true = is_valid_ip(S),
+						true = is_valid_ip(E);
+					   (I) ->
+						true = is_valid_ip(I)
+					end, B),
+			  State#state{blacklist = B}
+		      catch _:_ ->
+			  error_logger:error_msg("wrong 'turn_blacklist' "
+						 "value: ~p", [B]),
+			  State
+		      end;
 		 ({turn_max_permissions, Wrong}, State) ->
 		      error_logger:error_msg("wrong 'turn_max_permissions' "
 					     "value: ~p", [Wrong]),
@@ -648,6 +671,23 @@ addr_to_str({{_, _, _, _} = Addr, Port}) ->
     [inet_parse:ntoa(Addr), $:, integer_to_list(Port)];
 addr_to_str(Addr) ->
     inet_parse:ntoa(Addr).
+
+is_valid_ip({I1, I2, I3, I4}) ->
+    (((I1 >= 0) and (I1 =< 255)) and
+     ((I2 >= 0) and (I2 =< 255)) and
+     ((I3 >= 0) and (I3 =< 255)) and
+     ((I4 >= 0) and (I4 =< 255)));
+is_valid_ip({I1, I2, I3, I4, I5, I6, I7, I8}) ->
+    (((I1 >= 0) and (I1 =< 65535)) and
+     ((I2 >= 0) and (I2 =< 65535)) and
+     ((I3 >= 0) and (I3 =< 65535)) and
+     ((I4 >= 0) and (I4 =< 65535)) and
+     ((I5 >= 0) and (I5 =< 65535)) and
+     ((I6 >= 0) and (I6 =< 65535)) and
+     ((I7 >= 0) and (I7 =< 65535)) and
+     ((I8 >= 0) and (I8 =< 65535)));
+is_valid_ip(_) ->
+    false.
 
 get_sockmod(Opts) ->
     case proplists:get_bool(tls, Opts) of
