@@ -356,7 +356,7 @@ handle_info({timeout, _Tref, stop}, _StateName, State) ->
     {stop, normal, State};
 handle_info({timeout, _Tref, {permission_timeout, Addr}},
 	    StateName, State) ->
-    ?dbg("permission for ~s timed out", [Addr]),
+    ?dbg("permission for ~s timed out", [addr_to_str(Addr)]),
     case maps:find(Addr, State#state.permissions) of
 	{ok, _} ->
 	    Perms = maps:remove(Addr, State#state.permissions),
