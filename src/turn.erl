@@ -51,6 +51,10 @@
 -define(CHANNEL_LIFETIME, 600000). %% 10 minutes
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
+-type blacklist() :: [inet:ip_address() |
+		      {inet:ip_address(), inet:ip_address()}].
+
+-export_type([blacklist/0]).
 
 -record(state,
 	{sock_mod = gen_udp             :: gen_udp | gen_tcp | fast_tls,
@@ -75,8 +79,7 @@
 	 last_pkt = <<>>                :: binary(),
 	 seq = 1                        :: non_neg_integer(),
 	 life_timer                     :: reference(),
-	 blacklist                      :: [{inet:ip_address(),
-					     inet:ip_address()}]}).
+	 blacklist                      :: blacklist()}).
 
 %%====================================================================
 %% API

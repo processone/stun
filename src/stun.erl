@@ -69,8 +69,6 @@
 -endif.
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
--type blacklist() :: [inet:ip_address() |
-		      {inet:ip_address(), inet:ip_address()}].
 
 -record(state,
 	{sock                        :: inet:socket() | fast_tls:tls_socket(),
@@ -86,7 +84,7 @@
 	 max_allocs = 10             :: non_neg_integer() | infinity,
 	 shaper = none               :: stun_shaper:shaper(),
 	 max_permissions = 10        :: non_neg_integer() | infinity,
-	 blacklist = ?BLACKLIST      :: blacklist(),
+	 blacklist = ?BLACKLIST      :: turn:blacklist(),
 	 auth = user                 :: anonymous | user,
 	 nonces = treap:empty()      :: treap:treap(),
 	 realm = <<"">>              :: binary(),
