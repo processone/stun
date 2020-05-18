@@ -297,6 +297,12 @@ active(#stun{class = request,
 		    Chans = maps:put(Channel, {Peer, TRef},
 				     State#state.channels),
 		    NewState = NewState0#state{peers = Peers, channels = Chans},
+		    ?dbg("bound/refreshed TURN channel ~.16B for user ~s@~s "
+			 "from ~s: ~s <-> ~s",
+			 [Channel, State#state.username, State#state.realm,
+			  addr_to_str(State#state.addr),
+			  addr_to_str(State#state.relay_addr),
+			  addr_to_str(Peer)]),
 		    R = Resp#stun{class = response},
 		    {next_state, active, send(NewState, R)};
 		{error, Code} ->
