@@ -533,21 +533,8 @@ blacklisted(#state{blacklist = Blacklist}, IPs) ->
 
 matches_ip(IP, IP) ->
     true;
-matches_ip({{S1, S2, S3, S4}, {E1, E2, E3, E4}}, {I1, I2, I3, I4}) ->
-    (((I1 >= S1) and (I1 =< E1)) and
-     ((I2 >= S2) and (I2 =< E2)) and
-     ((I3 >= S3) and (I3 =< E3)) and
-     ((I4 >= S4) and (I4 =< E4)));
-matches_ip({{S1, S2, S3, S4, S5, S6, S7, S8}, {E1, E2, E3, E4, E5, E6, E7, E8}},
-	    {I1, I2, I3, I4, I5, I6, I7, I8}) ->
-    (((I1 >= S1) and (I1 =< E1)) and
-     ((I2 >= S2) and (I2 =< E2)) and
-     ((I3 >= S3) and (I3 =< E3)) and
-     ((I4 >= S4) and (I4 =< E4)) and
-     ((I5 >= S5) and (I5 =< E5)) and
-     ((I6 >= S6) and (I6 =< E6)) and
-     ((I7 >= S7) and (I7 =< E7)) and
-     ((I8 >= S8) and (I8 =< E8)));
+matches_ip({First, Last}, IP) ->
+    (IP >= First) and (IP =< Last);
 matches_ip(_, _) ->
     false.
 
