@@ -56,10 +56,8 @@
 -define(NONCE_LIFETIME, 60*1000*1000). %% 1 minute (in usec)
 -define(SERVER_NAME, <<"P1 STUN library">>).
 %% RFC 6156, 9.1: "a TURN relay MUST NOT accept Teredo or 6to4 addresses".
--define(BLACKLIST, [{{8193, 0, 0, 0, 0, 0, 0, 0}, % 2001::/32 (Teredo).
-		     {8193, 00000, 65535, 65535, 65535, 65535, 65535, 65535}},
-		    {{8194, 0, 0, 0, 0, 0, 0, 0}, % 2002::/16 (6to4).
-		     {8194, 65535, 65535, 65535, 65535, 65535, 65535, 65535}}]).
+-define(BLACKLIST, [{{8193, 0, 0, 0, 0, 0, 0, 0}, 32},   % 2001::/32 (Teredo).
+		    {{8194, 0, 0, 0, 0, 0, 0, 0}, 16}]). % 2002::/16 (6to4).
 
 %%-define(debug, true).
 -ifdef(debug).
@@ -515,18 +513,13 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
 		      State#state{max_permissions = N};
 		 ({turn_blacklist, B}, State) ->
-		      try
-			  lists:foreach(fun({S, E}) ->
-						true = is_valid_ip(S),
-						true = is_valid_ip(E);
-					   (I) ->
-						true = is_valid_ip(I)
-					end, B),
-			  State#state{blacklist = B}
-		      catch _:_ ->
-			  error_logger:error_msg("wrong 'turn_blacklist' "
-						 "value: ~p", [B]),
-			  State
+		      case lists:all(fun is_valid_subnet/1, B) of
+			  true ->
+			      State#state{blacklist = B};
+			  false ->
+			      error_logger:error_msg("wrong 'turn_blacklist' "
+						     "value: ~p", [B]),
+			      State
 		      end;
 		 ({turn_max_permissions, Wrong}, State) ->
 		      error_logger:error_msg("wrong 'turn_max_permissions' "
@@ -670,21 +663,23 @@ addr_to_str({{_, _, _, _} = Addr, Port}) ->
 addr_to_str(Addr) ->
     inet_parse:ntoa(Addr).
 
-is_valid_ip({I1, I2, I3, I4}) ->
-    (((I1 >= 0) and (I1 =< 255)) and
-     ((I2 >= 0) and (I2 =< 255)) and
-     ((I3 >= 0) and (I3 =< 255)) and
-     ((I4 >= 0) and (I4 =< 255)));
-is_valid_ip({I1, I2, I3, I4, I5, I6, I7, I8}) ->
-    (((I1 >= 0) and (I1 =< 65535)) and
-     ((I2 >= 0) and (I2 =< 65535)) and
-     ((I3 >= 0) and (I3 =< 65535)) and
-     ((I4 >= 0) and (I4 =< 65535)) and
-     ((I5 >= 0) and (I5 =< 65535)) and
-     ((I6 >= 0) and (I6 =< 65535)) and
-     ((I7 >= 0) and (I7 =< 65535)) and
-     ((I8 >= 0) and (I8 =< 65535)));
-is_valid_ip(_) ->
+is_valid_subnet({{IP1, IP2, IP3, IP4}, Mask}) ->
+    (IP1 >= 0) and (IP1 =< 255) and
+    (IP2 >= 0) and (IP2 =< 255) and
+    (IP3 >= 0) and (IP3 =< 255) and
+    (IP4 >= 0) and (IP4 =< 255) and
+    (Mask >= 0) and (Mask =< 32);
+is_valid_subnet({{IP1, IP2, IP3, IP4, IP5, IP6, IP7, IP8}, Mask}) ->
+    (IP1 >= 0) and (IP1 =< 65535) and
+    (IP2 >= 0) and (IP2 =< 65535) and
+    (IP3 >= 0) and (IP3 =< 65535) and
+    (IP4 >= 0) and (IP4 =< 65535) and
+    (IP5 >= 0) and (IP5 =< 65535) and
+    (IP6 >= 0) and (IP6 =< 65535) and
+    (IP7 >= 0) and (IP7 =< 65535) and
+    (IP8 >= 0) and (IP8 =< 65535) and
+    (Mask >= 0) and (Mask =< 128);
+is_valid_subnet(_) ->
     false.
 
 get_sockmod(Opts) ->

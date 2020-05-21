@@ -51,8 +51,8 @@
 -define(CHANNEL_LIFETIME, 600000). %% 10 minutes
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
--type blacklist() :: [inet:ip_address() |
-		      {inet:ip_address(), inet:ip_address()}].
+-type subnet() :: {inet:ip4_address(), 0..32} | {inet:ip6_address(), 0..128}.
+-type blacklist() :: [subnet()].
 
 -export_type([blacklist/0]).
 
@@ -526,17 +526,43 @@ blacklisted(#state{blacklist = Blacklist}, IPs) ->
     lists:any(
       fun(IP) ->
 	      lists:any(
-		fun(Entry) ->
-			matches_ip(Entry, IP)
+		fun({Net, Mask}) ->
+			match_subnet(IP, Net, Mask)
 		end, Blacklist)
       end, IPs).
 
-matches_ip(IP, IP) ->
-    true;
-matches_ip({First, Last}, IP) ->
-    (IP >= First) and (IP =< Last);
-matches_ip(_, _) ->
+match_subnet({_, _, _, _} = IP,
+	     {_, _, _, _} = Net, Mask) ->
+    IPInt = ip_to_integer(IP),
+    NetInt = ip_to_integer(Net),
+    M = bnot (1 bsl (32 - Mask) - 1),
+    IPInt band M =:= NetInt band M;
+match_subnet({_, _, _, _, _, _, _, _} = IP,
+	     {_, _, _, _, _, _, _, _} = Net, Mask) ->
+    IPInt = ip_to_integer(IP),
+    NetInt = ip_to_integer(Net),
+    M = bnot (1 bsl (128 - Mask) - 1),
+    IPInt band M =:= NetInt band M;
+match_subnet({_, _, _, _} = IP,
+	     {0, 0, 0, 0, 0, 16#FFFF, _, _} = Net, Mask) ->
+    IPInt = ip_to_integer({0, 0, 0, 0, 0, 16#FFFF, 0, 0}) + ip_to_integer(IP),
+    NetInt = ip_to_integer(Net),
+    M = bnot (1 bsl (128 - Mask) - 1),
+    IPInt band M =:= NetInt band M;
+match_subnet({0, 0, 0, 0, 0, 16#FFFF, _, _} = IP,
+	     {_, _, _, _} = Net, Mask) ->
+    IPInt = ip_to_integer(IP) - ip_to_integer({0, 0, 0, 0, 0, 16#FFFF, 0, 0}),
+    NetInt = ip_to_integer(Net),
+    M = bnot (1 bsl (32 - Mask) - 1),
+    IPInt band M =:= NetInt band M;
+match_subnet(_, _, _) ->
     false.
+
+ip_to_integer({IP1, IP2, IP3, IP4}) ->
+    IP1 bsl 8 bor IP2 bsl 8 bor IP3 bsl 8 bor IP4;
+ip_to_integer({IP1, IP2, IP3, IP4, IP5, IP6, IP7, IP8}) ->
+    IP1 bsl 16 bor IP2 bsl 16 bor IP3 bsl 16 bor IP4 bsl 16
+	bor IP5 bsl 16 bor IP6 bsl 16 bor IP7 bsl 16 bor IP8.
 
 format_error({error, Reason}) ->
     case inet:format_error(Reason) of
