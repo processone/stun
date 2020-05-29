@@ -460,16 +460,14 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 	      fun({turn_ip, IP}, State) ->
 		      case prepare_addr(IP) of
 			  {ok, Addr} ->
-			      error_logger:error_msg("'turn_ip' is deprecated, "
-						     "specify "
-						     "'turn_ipv4_address' and "
-						     "optionally "
-						     "'turn_ipv6_address' "
-						     "instead", []),
+			      error_logger:error_msg(
+				"'turn_ip' is deprecated, specify "
+				"'turn_ipv4_address' and optionally "
+				"'turn_ipv6_address' instead", []),
 			      State#state{relay_ipv4_ip = Addr};
 			  {error, _} ->
-			      error_logger:error_msg("wrong 'turn_ip' "
-						     "value: ~p", [IP]),
+			      error_logger:error_msg(
+				"wrong 'turn_ip' value: ~p", [IP]),
 			      State
 		      end;
 		 ({turn_ipv4_address, IP}, State) ->
@@ -477,9 +475,8 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 			  {ok, Addr} ->
 			      State#state{relay_ipv4_ip = Addr};
 			  {error, _} ->
-			      error_logger:error_msg("wrong "
-						     "'turn_ipv4_address' "
-						     "value: ~p", [IP]),
+			      error_logger:error_msg(
+				"wrong 'turn_ipv4_address' value: ~p", [IP]),
 			      State
 		      end;
 		 ({turn_ipv6_address, IP}, State) ->
@@ -487,31 +484,30 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 			  {ok, Addr} ->
 			      State#state{relay_ipv6_ip = Addr};
 			  {error, _} ->
-			      error_logger:error_msg("wrong "
-						     "'turn_ipv6_address' "
-						     "value: ~p", [IP]),
+			      error_logger:error_msg(
+				"wrong 'turn_ipv6_address' value: ~p", [IP]),
 			      State
 		      end;
 		 ({turn_min_port, Min}, State)
 		    when is_integer(Min), Min > 1024, Min < 65536 ->
 		      State#state{min_port = Min};
 		 ({turn_min_port, Wrong}, State) ->
-		      error_logger:error_msg("wrong 'turn_min_port' value: "
-					     "~p", [Wrong]),
+		      error_logger:error_msg(
+			"wrong 'turn_min_port' value: ~p", [Wrong]),
 		      State;
 		 ({turn_max_port, Max}, State)
 		    when is_integer(Max), Max > 1024, Max < 65536 ->
 		      State#state{max_port = Max};
 		 ({turn_max_port, Wrong}, State) ->
-		      error_logger:error_msg("wrong 'turn_max_port' value: "
-					     "~p", [Wrong]),
+		      error_logger:error_msg(
+			"wrong 'turn_max_port' value: ~p", [Wrong]),
 		      State;
 		 ({turn_max_allocations, N}, State)
 		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
 		      State#state{max_allocs = N};
 		 ({turn_max_allocations, Wrong}, State) ->
-		      error_logger:error_msg("wrong 'turn_max_allocations' "
-					     "value: ~p", [Wrong]),
+		      error_logger:error_msg(
+			"wrong 'turn_max_allocations' value: ~p", [Wrong]),
 		      State;
 		 ({turn_max_permissions, N}, State)
 		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
@@ -521,50 +517,50 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 			  true ->
 			      State#state{blacklist = B};
 			  false ->
-			      error_logger:error_msg("wrong 'turn_blacklist' "
-						     "value: ~p", [B]),
+			      error_logger:error_msg(
+				"wrong 'turn_blacklist' value: ~p", [B]),
 			      State
 		      end;
 		 ({turn_max_permissions, Wrong}, State) ->
-		      error_logger:error_msg("wrong 'turn_max_permissions' "
-					     "value: ~p", [Wrong]),
+		      error_logger:error_msg(
+			"wrong 'turn_max_permissions' value: ~p", [Wrong]),
 		      State;
 		 ({shaper, S}, State)
 		    when S == none orelse (is_integer(S) andalso (S > 0)) ->
 		      State#state{shaper = stun_shaper:new(S)};
 		 ({shaper, Wrong}, State) ->
-		      error_logger:error_msg("wrong 'shaper' "
-					     "value: ~p", [Wrong]),
+		      error_logger:error_msg(
+			"wrong 'shaper' value: ~p", [Wrong]),
 		      State;
 		 ({server_name, S}, State) ->
 		      try
 			  State#state{server_name = iolist_to_binary(S)}
 		      catch _:_ ->
-			      error_logger:error_msg("wrong 'server_name' "
-						     "value: ~p", [S]),
+			      error_logger:error_msg(
+				"wrong 'server_name' value: ~p", [S]),
 			      State
 		      end;
 		 ({auth_realm, R}, State) ->
 		      try
 			  State#state{realm = iolist_to_binary(R)}
 		      catch _:_ ->
-			      error_logger:error_msg("wrong 'auth_realm' "
-						     "value: ~p", [R]),
+			      error_logger:error_msg(
+				"wrong 'auth_realm' value: ~p", [R]),
 			      State
 		      end;
 		 ({auth_fun, F}, State) when is_function(F) ->
 		      State#state{auth_fun = F};
 		 ({auth_fun, Wrong}, State) ->
-		      error_logger:error_msg("wrong 'auth_fun' "
-					     "value: ~p", [Wrong]),
+		      error_logger:error_msg(
+			"wrong 'auth_fun' value: ~p", [Wrong]),
 		      State;
 		 ({auth_type, anonymous}, State) ->
 		      State#state{auth = anonymous};
 		 ({auth_type, user}, State) ->
 		      State#state{auth = user};
 		 ({auth_type, Wrong}, State) ->
-		      error_logger:error_msg("wrong 'auth_type' "
-					     "value: ~p", [Wrong]),
+		      error_logger:error_msg(
+			"wrong 'auth_type' value: ~p", [Wrong]),
 		      State;
 		 ({use_turn, _}, State) -> State;
 		 (use_turn, State) -> State;
