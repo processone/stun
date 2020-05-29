@@ -69,8 +69,8 @@
 	 channels = #{}                 :: map(),
 	 permissions = #{}              :: map(),
 	 max_permissions                :: non_neg_integer() | atom(),
-	 relay_v4_ip = {127,0,0,1}      :: inet:ip4_address(),
-	 relay_v6_ip                    :: inet:ip6_address(),
+	 relay_ipv4_ip = {127,0,0,1}    :: inet:ip4_address(),
+	 relay_ipv6_ip                  :: inet:ip6_address(),
 	 min_port = 49152               :: non_neg_integer(),
 	 max_port = 65535               :: non_neg_integer(),
 	 relay_addr                     :: addr(),
@@ -107,8 +107,8 @@ init([Opts]) ->
     State = #state{sock_mod = proplists:get_value(sock_mod, Opts),
 		   sock = proplists:get_value(sock, Opts),
 		   key = proplists:get_value(key, Opts),
-		   relay_v4_ip = proplists:get_value(relay_v4_ip, Opts),
-		   relay_v6_ip = proplists:get_value(relay_v6_ip, Opts),
+		   relay_ipv4_ip = proplists:get_value(relay_ipv4_ip, Opts),
+		   relay_ipv6_ip = proplists:get_value(relay_ipv6_ip, Opts),
 		   min_port = proplists:get_value(min_port, Opts),
 		   max_port = proplists:get_value(max_port, Opts),
 		   max_permissions = proplists:get_value(max_permissions, Opts),
@@ -153,7 +153,7 @@ wait_for_allocate(#stun{class = request,
 			  'UNKNOWN-ATTRIBUTES' = [?STUN_ATTR_DONT_FRAGMENT],
 			  'ERROR-CODE' = stun_codec:error(420)},
 	    {stop, normal, send(State, R)};
-       Family == inet6, State#state.relay_v6_ip == undefined ->
+       Family == inet6, State#state.relay_ipv6_ip == undefined ->
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(440)},
 	    {stop, normal, send(State, R)};
@@ -163,8 +163,8 @@ wait_for_allocate(#stun{class = request,
 	    {stop, normal, send(State, R)};
        true ->
 	    RelayIP = case Family of
-			  inet -> State#state.relay_v4_ip;
-			  inet6 -> State#state.relay_v6_ip
+			  inet -> State#state.relay_ipv4_ip;
+			  inet6 -> State#state.relay_ipv6_ip
 		      end,
 	    case allocate_addr(Family, RelayIP,
 			       {State#state.min_port, State#state.max_port}) of
