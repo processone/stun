@@ -35,6 +35,12 @@
 
 -include("stun.hrl").
 
+-ifdef(USE_OLD_CRYPTO_HMAC).
+crypto_hmac(Type, Key, Data) -> crypto:hmac(Type, Key, Data).
+-else.
+crypto_hmac(Type, Key, Data) -> crypto:mac(hmac, Type, Key, Data).
+-endif.
+
 %%====================================================================
 %% API
 %%====================================================================
@@ -104,7 +110,7 @@ encode(#stun{class = Class,
 		     end,
 	    Data = <<0:2, Type:14, (Len+24):16, Magic:32,
 		    TrID:96, Attrs/binary>>,
-	    MessageIntegrity = crypto:hmac(sha, NewKey, Data),
+	    MessageIntegrity = crypto_hmac(sha, NewKey, Data),
 	    <<Data/binary, ?STUN_ATTR_MESSAGE_INTEGRITY:16,
 	     20:16, MessageIntegrity/binary>>;
        true ->
@@ -125,7 +131,7 @@ check_integrity(#stun{raw = Raw, 'MESSAGE-INTEGRITY' = MI}, Key)
 		 _ ->
 		     Key
 	     end,
-    crypto:hmac(sha, NewKey, Raw) == MI;
+    crypto_hmac(sha, NewKey, Raw) == MI;
 check_integrity(_Msg, _Key) ->
     false.
 
