@@ -1,5 +1,7 @@
 # Version 1.0.33
 
+* Updating fast_tls to version 1.1.6.
+* Updating p1_utils to version 1.0.19.
 * Fix compatibility issues with Erlang 23
 * Add support for ipv6 clients
 * Improve compatibilty with clients
