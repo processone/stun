@@ -120,9 +120,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 start_listener(Port, Transport, Opts, Owner)
   when Transport == tcp; Transport == tls ->
+    {Opts1, SockOpts} = split_opts(Opts),
     OptsWithTLS = case Transport of
-		      tls -> [tls|Opts];
-		      tcp -> Opts
+		      tls -> [tls|Opts1];
+		      tcp -> Opts1
 		  end,
     case gen_tcp:listen(Port, [binary,
                                {packet, 0},
@@ -131,7 +132,7 @@ start_listener(Port, Transport, Opts, Owner)
                                {nodelay, true},
                                {keepalive, true},
 			       {send_timeout, ?TCP_SEND_TIMEOUT},
-			       {send_timeout_close, true}]) of
+			       {send_timeout_close, true} | SockOpts]) of
         {ok, ListenSocket} ->
             Owner ! {self(), ok},
 	    OptsWithTLS1 = stun:tcp_init(ListenSocket, OptsWithTLS),
@@ -140,13 +141,14 @@ start_listener(Port, Transport, Opts, Owner)
             Owner ! {self(), Err}
     end;
 start_listener(Port, udp, Opts, Owner) ->
+    {Opts1, SockOpts} = split_opts(Opts),
     case gen_udp:open(Port, [binary,
 			     {active, false},
-			     {reuseaddr, true}]) of
+			     {reuseaddr, true} | SockOpts]) of
 	{ok, Socket} ->
 	    Owner ! {self(), ok},
-	    Opts1 = stun:udp_init(Socket, Opts),
-	    udp_recv(Socket, Opts1);
+	    Opts2 = stun:udp_init(Socket, Opts1),
+	    udp_recv(Socket, Opts2);
 	Err ->
 	    Owner ! {self(), Err}
     end.
@@ -193,6 +195,15 @@ udp_recv(Socket, Opts) ->
 	      "unexpected UDP error: ~s", [inet:format_error(Reason)]),
 	    erlang:error(Reason)
     end.
+
+split_opts(Opts) ->
+    lists:partition(fun({ip, _Val}) -> false;
+		       ({fd, _Val}) -> false;
+		       ({backlog, _Val}) -> false;
+		       (inet6) -> false;
+		       (inet) -> false;
+		       (_Opt) -> true
+		    end, Opts).
 
 format_listener_error(Port, Transport, Opts, Err) ->
     error_logger:error_msg("failed to start listener:~n"
