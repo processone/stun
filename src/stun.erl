@@ -512,6 +512,10 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 ({turn_max_permissions, N}, State)
 		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
 		      State#state{max_permissions = N};
+		 ({turn_max_permissions, Wrong}, State) ->
+		      error_logger:error_msg(
+			"wrong 'turn_max_permissions' value: ~p", [Wrong]),
+		      State;
 		 ({turn_blacklist, B}, State) ->
 		      case lists:all(fun is_valid_subnet/1, B) of
 			  true ->
@@ -521,10 +525,6 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 				"wrong 'turn_blacklist' value: ~p", [B]),
 			      State
 		      end;
-		 ({turn_max_permissions, Wrong}, State) ->
-		      error_logger:error_msg(
-			"wrong 'turn_max_permissions' value: ~p", [Wrong]),
-		      State;
 		 ({shaper, S}, State)
 		    when S == none orelse (is_integer(S) andalso (S > 0)) ->
 		      State#state{shaper = stun_shaper:new(S)};
