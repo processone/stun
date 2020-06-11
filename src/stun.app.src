@@ -26,7 +26,7 @@
   {vsn,          "1.0.33"},
   {modules,      []},
   {registered,   []},
-  {applications, [kernel, stdlib, p1_utils]},
+  {applications, [kernel, stdlib, fast_tls, p1_utils]},
   {mod,          {stun_app,[]}},
 
   %% hex.pm packaging:
