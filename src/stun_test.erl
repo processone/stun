@@ -25,6 +25,7 @@
 
 -export([bind_udp/2, bind_tcp/2, allocate_udp/5]).
 
+-define(STUN_IP, {127,0,0,1}).
 -define(STUN_PORT, 34780).
 -define(STUNS_PORT, 53490).
 -define(RECV_TIMEOUT, timer:seconds(5)).
@@ -46,7 +47,7 @@ mk_cert_test() ->
 
 add_udp_listener_test() ->
     ?assertEqual(ok, stun_listener:add_listener(
-		       ?STUN_PORT, udp,
+		       ?STUN_IP, ?STUN_PORT, udp,
 		       [use_turn,
 			{auth_type, user},
 			{auth_realm, ?REALM},
@@ -55,21 +56,22 @@ add_udp_listener_test() ->
 				   end}])).
 
 add_tcp_listener_test() ->
-    ?assertEqual(ok, stun_listener:add_listener(?STUN_PORT, tcp, [])).
+    ?assertEqual(ok, stun_listener:add_listener(?STUN_IP, ?STUN_PORT, tcp, [])).
 
 add_tls_listener_test() ->
     ?assertEqual(ok, stun_listener:add_listener(
-		       ?STUNS_PORT, tcp, [tls, {certfile, "certfile.pem"}])).
+		       ?STUN_IP, ?STUNS_PORT, tcp,
+		       [tls, {certfile, "certfile.pem"}])).
 
 bind_udp_test() ->
     TrID = mk_trid(),
     Msg = #stun{method = ?STUN_METHOD_BINDING,
  		class = request,
  		trid = TrID},
-    {ok, Socket} = gen_udp:open(0, [binary, {ip, {127,0,0,1}}, {active, false}]),
+    {ok, Socket} = gen_udp:open(0, [binary, {ip, ?STUN_IP}, {active, false}]),
     {ok, Addr} = inet:sockname(Socket),
     PktOut = stun_codec:encode(Msg),
-    ?assertEqual(ok, gen_udp:send(Socket, {127,0,0,1}, ?STUN_PORT, PktOut)),
+    ?assertEqual(ok, gen_udp:send(Socket, ?STUN_IP, ?STUN_PORT, PktOut)),
     {ok, {_, _, PktIn}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
     ?assertMatch(
        {ok, #stun{trid = TrID,
@@ -82,7 +84,7 @@ bind_tcp_test() ->
     Msg = #stun{method = ?STUN_METHOD_BINDING,
  		class = request,
  		trid = TrID},
-    {ok, Socket} = gen_tcp:connect({127,0,0,1}, ?STUN_PORT,
+    {ok, Socket} = gen_tcp:connect(?STUN_IP, ?STUN_PORT,
 				   [binary, {active, false}]),
     {ok, Addr} = inet:sockname(Socket),
     Pkt = stun_codec:encode(Msg),
@@ -98,7 +100,7 @@ bind_tls_test() ->
     Msg = #stun{method = ?STUN_METHOD_BINDING,
  		class = request,
  		trid = TrID},
-    {ok, Socket} = gen_tcp:connect({127,0,0,1}, ?STUNS_PORT,
+    {ok, Socket} = gen_tcp:connect(?STUN_IP, ?STUNS_PORT,
 				   [binary, {active, true}]),
     {ok, TLSSocket} = fast_tls:tcp_to_tls(
 			Socket, [{certfile, <<"certfile.pem">>}, connect]),
@@ -114,14 +116,14 @@ bind_tls_test() ->
     ?assertEqual(ok, gen_tcp:close(Socket)).
 
 del_tcp_listener_test() ->
-    ?assertEqual(ok, stun_listener:del_listener(?STUN_PORT, tcp)).
+    ?assertEqual(ok, stun_listener:del_listener(?STUN_IP, ?STUN_PORT, tcp)).
 
 del_tls_listener_test() ->
-    ?assertEqual(ok, stun_listener:del_listener(?STUNS_PORT, tcp)).
+    ?assertEqual(ok, stun_listener:del_listener(?STUN_IP, ?STUNS_PORT, tcp)).
 
 allocate_udp_test() ->
-    {ok, Socket} = gen_udp:open(0, [binary, {ip, {127,0,0,1}}, {active, false}]),
-    {ok, PeerSocket} = gen_udp:open(0, [binary, {ip, {127,0,0,1}}, {active, false}]),
+    {ok, Socket} = gen_udp:open(0, [binary, {ip, ?STUN_IP}, {active, false}]),
+    {ok, PeerSocket} = gen_udp:open(0, [binary, {ip, ?STUN_IP}, {active, false}]),
     {ok, PeerAddr} = inet:sockname(PeerSocket),
     {ok, Addr} = inet:sockname(Socket),
     %% Allocating address, receiving 401 with nonce and realm
@@ -130,7 +132,7 @@ allocate_udp_test() ->
 		 class = request,
 		 trid = TrID1},
     PktOut1 = stun_codec:encode(Msg1),
-    ?assertEqual(ok, gen_udp:send(Socket, {127,0,0,1}, ?STUN_PORT, PktOut1)),
+    ?assertEqual(ok, gen_udp:send(Socket, ?STUN_IP, ?STUN_PORT, PktOut1)),
     {ok, {_, _, PktIn1}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
     {ok, #stun{trid = TrID1,
 	       class = error,
@@ -146,7 +148,7 @@ allocate_udp_test() ->
 		 'REALM' = ?REALM,
 		 'USERNAME' = ?USER},
     PktOut2 = stun_codec:encode(Msg2, {?USER, ?REALM, ?PASS}),
-    ?assertEqual(ok, gen_udp:send(Socket, {127,0,0,1}, ?STUN_PORT, PktOut2)),
+    ?assertEqual(ok, gen_udp:send(Socket, ?STUN_IP, ?STUN_PORT, PktOut2)),
     {ok, {_, _, PktIn2}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
     {ok, #stun{trid = TrID2,
 	       class = response,
@@ -161,7 +163,7 @@ allocate_udp_test() ->
 		 'REALM' = ?REALM,
 		 'USERNAME' = ?USER},
     PktOut3 = stun_codec:encode(Msg3, {?USER, ?REALM, ?PASS}),
-    ?assertEqual(ok, gen_udp:send(Socket, {127,0,0,1}, ?STUN_PORT, PktOut3)),
+    ?assertEqual(ok, gen_udp:send(Socket, ?STUN_IP, ?STUN_PORT, PktOut3)),
     {ok, {_, _, PktIn3}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
     {ok, #stun{trid = TrID3,
 	       class = response}} = stun_codec:decode(PktIn3, datagram),
@@ -174,7 +176,7 @@ allocate_udp_test() ->
 		 'XOR-PEER-ADDRESS' = [PeerAddr],
 		 'DATA' = Data1},
     PktOut4 = stun_codec:encode(Msg4),
-    ?assertEqual(ok, gen_udp:send(Socket, {127,0,0,1}, ?STUN_PORT, PktOut4)),
+    ?assertEqual(ok, gen_udp:send(Socket, ?STUN_IP, ?STUN_PORT, PktOut4)),
     ?assertMatch({ok, {_, _, Data1}}, gen_udp:recv(PeerSocket, 0, ?RECV_TIMEOUT)),
     %% Peer sends the data back. We receive it.
     ?assertEqual(ok, gen_udp:send(PeerSocket, RelayIP, RelayPort, Data1)),
@@ -195,7 +197,7 @@ allocate_udp_test() ->
 		 'REALM' = ?REALM,
 		 'USERNAME' = ?USER},
     PktOut5 = stun_codec:encode(Msg5, {?USER, ?REALM, ?PASS}),
-    ?assertEqual(ok, gen_udp:send(Socket, {127,0,0,1}, ?STUN_PORT, PktOut5)),
+    ?assertEqual(ok, gen_udp:send(Socket, ?STUN_IP, ?STUN_PORT, PktOut5)),
     {ok, {_, _, PktIn5}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
     ?assertMatch(
        {ok, #stun{trid = TrID5,
@@ -205,7 +207,7 @@ allocate_udp_test() ->
     Data3 = crypto:strong_rand_bytes(20),
     Msg6 = #turn{channel = ?CHANNEL, data = Data3},
     PktOut6 = stun_codec:encode(Msg6),
-    ?assertEqual(ok, gen_udp:send(Socket, {127,0,0,1}, ?STUN_PORT, PktOut6)),
+    ?assertEqual(ok, gen_udp:send(Socket, ?STUN_IP, ?STUN_PORT, PktOut6)),
     ?assertMatch({ok, {_, _, Data3}}, gen_udp:recv(PeerSocket, 0, ?RECV_TIMEOUT)),
     %% The peer sends the data back. We receive it.
     ?assertEqual(ok, gen_udp:send(PeerSocket, RelayIP, RelayPort, Data3)),
@@ -222,7 +224,7 @@ allocate_udp_test() ->
 		 'REALM' = ?REALM,
 		 'USERNAME' = ?USER},
     PktOut7 = stun_codec:encode(Msg7, {?USER, ?REALM, ?PASS}),
-    ?assertEqual(ok, gen_udp:send(Socket, {127,0,0,1}, ?STUN_PORT, PktOut7)),
+    ?assertEqual(ok, gen_udp:send(Socket, ?STUN_IP, ?STUN_PORT, PktOut7)),
     {ok, {_, _, PktIn7}} = gen_udp:recv(Socket, 0, ?RECV_TIMEOUT),
     ?assertMatch(
        {ok, #stun{trid = TrID7,

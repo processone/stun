@@ -26,7 +26,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, add_listener/3, del_listener/2, start_listener/4]).
+-export([start_link/0, add_listener/4, del_listener/3, start_listener/5]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -41,11 +41,11 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-add_listener(Port, Transport, Opts) ->
-    gen_server:call(?MODULE, {add_listener, Port, Transport, Opts}).
+add_listener(IP, Port, Transport, Opts) ->
+    gen_server:call(?MODULE, {add_listener, IP, Port, Transport, Opts}).
 
-del_listener(Port, Transport) ->
-    gen_server:call(?MODULE, {del_listener, Port, Transport}).
+del_listener(IP, Port, Transport) ->
+    gen_server:call(?MODULE, {del_listener, IP, Port, Transport}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -53,38 +53,41 @@ del_listener(Port, Transport) ->
 init([]) ->
     {ok, #state{}}.
 
-handle_call({add_listener, Port, Transport, Opts}, _From, State) ->
-    case maps:find({Port, Transport}, State#state.listeners) of
+handle_call({add_listener, IP, Port, Transport, Opts}, _From, State) ->
+    case maps:find({IP, Port, Transport}, State#state.listeners) of
 	{ok, _} ->
 	    Err = {error, already_started},
 	    {reply, Err, State};
 	error ->
 	    {Pid, MRef} = spawn_monitor(?MODULE, start_listener,
-					[Port, Transport, Opts, self()]),
+					[IP, Port, Transport, Opts, self()]),
 	    receive
 		{'DOWN', MRef, _Type, _Object, Info} ->
 		    Res = {error, Info},
-		    format_listener_error(Port, Transport, Opts, Res),
+		    format_listener_error(IP, Port, Transport, Opts, Res),
 		    {reply, Res, State};
 		{Pid, Reply} ->
 		    case Reply of
 			{error, _} = Err ->
-			    format_listener_error(Port, Transport, Opts, Err),
+			    format_listener_error(IP, Port, Transport, Opts,
+						  Err),
 			    {reply, Reply, State};
 			ok ->
 			    Listeners = maps:put(
-					  {Port, Transport}, {MRef, Pid, Opts},
+					  {IP, Port, Transport},
+					  {MRef, Pid, Opts},
 					  State#state.listeners),
 			    {reply, ok, State#state{listeners = Listeners}}
 		    end
 	    end
     end;
-handle_call({del_listener, Port, Transport}, _From, State) ->
-    case maps:find({Port, Transport}, State#state.listeners) of
+handle_call({del_listener, IP, Port, Transport}, _From, State) ->
+    case maps:find({IP, Port, Transport}, State#state.listeners) of
 	{ok, {MRef, Pid, _Opts}} ->
 	    catch erlang:demonitor(MRef, [flush]),
 	    catch exit(Pid, kill),
-	    Listeners = maps:remove({Port, Transport}, State#state.listeners),
+	    Listeners = maps:remove({IP, Port, Transport},
+				    State#state.listeners),
 	    {reply, ok, State#state{listeners = Listeners}};
 	error ->
 	    {reply, {error, notfound}, State}
@@ -98,9 +101,9 @@ handle_cast(_Msg, State) ->
 
 handle_info({'DOWN', MRef, _Type, _Pid, Info}, State) ->
     Listeners = maps:filter(
-		  fun({Port, Transport}, {Ref, _, _}) when Ref == MRef ->
+		  fun({IP, Port, Transport}, {Ref, _, _}) when Ref == MRef ->
 			  error_logger:error_msg("listener on ~p/~p failed: ~p",
-						 [Port, Transport, Info]),
+						 [IP, Port, Transport, Info]),
 			  false;
 		     (_, _) ->
 			  true
@@ -118,21 +121,21 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-start_listener(Port, Transport, Opts, Owner)
+start_listener(IP, Port, Transport, Opts, Owner)
   when Transport == tcp; Transport == tls ->
-    {Opts1, SockOpts} = split_opts(Opts),
     OptsWithTLS = case Transport of
-		      tls -> [tls|Opts1];
-		      tcp -> Opts1
+		      tls -> [tls|Opts];
+		      tcp -> Opts
 		  end,
     case gen_tcp:listen(Port, [binary,
+                               {ip, IP},
                                {packet, 0},
                                {active, false},
                                {reuseaddr, true},
                                {nodelay, true},
                                {keepalive, true},
 			       {send_timeout, ?TCP_SEND_TIMEOUT},
-			       {send_timeout_close, true} | SockOpts]) of
+			       {send_timeout_close, true}]) of
         {ok, ListenSocket} ->
             Owner ! {self(), ok},
 	    OptsWithTLS1 = stun:tcp_init(ListenSocket, OptsWithTLS),
@@ -140,15 +143,15 @@ start_listener(Port, Transport, Opts, Owner)
         Err ->
             Owner ! {self(), Err}
     end;
-start_listener(Port, udp, Opts, Owner) ->
-    {Opts1, SockOpts} = split_opts(Opts),
+start_listener(IP, Port, udp, Opts, Owner) ->
     case gen_udp:open(Port, [binary,
+			     {ip, IP},
 			     {active, false},
-			     {reuseaddr, true} | SockOpts]) of
+			     {reuseaddr, true}]) of
 	{ok, Socket} ->
 	    Owner ! {self(), ok},
-	    Opts2 = stun:udp_init(Socket, Opts1),
-	    udp_recv(Socket, Opts2);
+	    Opts1 = stun:udp_init(Socket, Opts),
+	    udp_recv(Socket, Opts1);
 	Err ->
 	    Owner ! {self(), Err}
     end.
@@ -196,19 +199,11 @@ udp_recv(Socket, Opts) ->
 	    erlang:error(Reason)
     end.
 
-split_opts(Opts) ->
-    lists:partition(fun({ip, _Val}) -> false;
-		       ({fd, _Val}) -> false;
-		       ({backlog, _Val}) -> false;
-		       (inet6) -> false;
-		       (inet) -> false;
-		       (_Opt) -> true
-		    end, Opts).
-
-format_listener_error(Port, Transport, Opts, Err) ->
+format_listener_error(IP, Port, Transport, Opts, Err) ->
     error_logger:error_msg("failed to start listener:~n"
+			   "** IP: ~p~n"
 			   "** Port: ~p~n"
 			   "** Transport: ~p~n"
 			   "** Options: ~p~n"
 			   "** Reason: ~p",
-			   [Port, Transport, Opts, Err]).
+			   [IP, Port, Transport, Opts, Err]).
