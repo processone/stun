@@ -35,6 +35,21 @@
 -define(TCP_SEND_TIMEOUT, 10000).
 -record(state, {listeners = #{}}).
 
+-ifdef(USE_OLD_LOGGER).
+-define(LOG_DEBUG(Str), error_logger:info_msg(Str)).
+-define(LOG_DEBUG(Str, Args), error_logger:info_msg(Str, Args)).
+-define(LOG_INFO(Str), error_logger:info_msg(Str)).
+-define(LOG_INFO(Str, Args), error_logger:info_msg(Str, Args)).
+-define(LOG_NOTICE(Str), error_logger:info_msg(Str)).
+-define(LOG_NOTICE(Str, Args), error_logger:info_msg(Str, Args)).
+-define(LOG_WARNING(Str), error_logger:warning_msg(Str)).
+-define(LOG_WARNING(Str, Args), error_logger:warning_msg(Str, Args)).
+-define(LOG_ERROR(Str), error_logger:error_msg(Str)).
+-define(LOG_ERROR(Str, Args), error_logger:error_msg(Str, Args)).
+-else. % Use new logging API.
+-include_lib("kernel/include/logger.hrl").
+-endif.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -51,6 +66,7 @@ del_listener(IP, Port, Transport) ->
 %%% gen_server callbacks
 %%%===================================================================
 init([]) ->
+    ok = init_logger(),
     {ok, #state{}}.
 
 handle_call({add_listener, IP, Port, Transport, Opts}, _From, State) ->
@@ -102,8 +118,8 @@ handle_cast(_Msg, State) ->
 handle_info({'DOWN', MRef, _Type, _Pid, Info}, State) ->
     Listeners = maps:filter(
 		  fun({IP, Port, Transport}, {Ref, _, _}) when Ref == MRef ->
-			  error_logger:error_msg("listener on ~p/~p failed: ~p",
-						 [IP, Port, Transport, Info]),
+			  ?LOG_ERROR("listener on ~p/~p failed: ~p",
+				     [IP, Port, Transport, Info]),
 			  false;
 		     (_, _) ->
 			  true
@@ -162,9 +178,9 @@ accept(ListenSocket, Opts) ->
             case {inet:peername(Socket),
                   inet:sockname(Socket)} of
                 {{ok, {PeerAddr, PeerPort}}, {ok, {Addr, Port}}} ->
-                    error_logger:info_msg("accepted connection: ~s:~p -> ~s:~p",
-					  [inet_parse:ntoa(PeerAddr), PeerPort,
-					   inet_parse:ntoa(Addr), Port]),
+		    ?LOG_INFO("accepted connection: ~s:~p -> ~s:~p",
+			      [inet_parse:ntoa(PeerAddr), PeerPort,
+			       inet_parse:ntoa(Addr), Port]),
                     case stun:start({gen_tcp, Socket}, Opts) of
                         {ok, Pid} ->
                             gen_tcp:controlling_process(Socket, Pid);
@@ -172,7 +188,7 @@ accept(ListenSocket, Opts) ->
                             Err
                     end;
                 Err ->
-                    error_logger:error_msg("unable to fetch peername: ~p", [Err]),
+                    ?LOG_ERROR("unable to fetch peername: ~p", [Err]),
                     Err
             end,
             accept(ListenSocket, Opts);
@@ -185,25 +201,32 @@ udp_recv(Socket, Opts) ->
 	{ok, {Addr, Port, Packet}} ->
 	    case catch stun:udp_recv(Socket, Addr, Port, Packet, Opts) of
 		{'EXIT', Reason} ->
-		    error_logger:error_msg("failed to process UDP packet:~n"
-					   "** Source: {~p, ~p}~n"
-					   "** Reason: ~p~n** Packet: ~p",
-					   [Addr, Port, Reason, Packet]),
+		    ?LOG_ERROR("failed to process UDP packet:~n"
+			       "** Source: {~p, ~p}~n"
+			       "** Reason: ~p~n** Packet: ~p",
+			       [Addr, Port, Reason, Packet]),
 		    udp_recv(Socket, Opts);
 		NewOpts ->
 		    udp_recv(Socket, NewOpts)
 	    end;
 	{error, Reason} ->
-	    error_logger:error_msg(
-	      "unexpected UDP error: ~s", [inet:format_error(Reason)]),
+	    ?LOG_ERROR("unexpected UDP error: ~s", [inet:format_error(Reason)]),
 	    erlang:error(Reason)
     end.
 
 format_listener_error(IP, Port, Transport, Opts, Err) ->
-    error_logger:error_msg("failed to start listener:~n"
-			   "** IP: ~p~n"
-			   "** Port: ~p~n"
-			   "** Transport: ~p~n"
-			   "** Options: ~p~n"
-			   "** Reason: ~p",
-			   [IP, Port, Transport, Opts, Err]).
+    ?LOG_ERROR("failed to start listener:~n"
+	       "** IP: ~p~n"
+	       "** Port: ~p~n"
+	       "** Transport: ~p~n"
+	       "** Options: ~p~n"
+	       "** Reason: ~p",
+	       [IP, Port, Transport, Opts, Err]).
+
+-ifdef(USE_OLD_LOGGER).
+init_logger() ->
+    ok.
+-else.
+init_logger() ->
+    logger:update_process_metadata(#{domain => [stun, listener]}).
+-endif.

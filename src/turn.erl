@@ -38,11 +38,28 @@
 
 -include("stun.hrl").
 
+-ifdef(USE_OLD_LOGGER).
 %%-define(debug, true).
 -ifdef(debug).
--define(dbg(Str, Args), error_logger:info_msg(Str, Args)).
+-define(LOG_DEBUG(Str), error_logger:info_msg(Str)).
+-define(LOG_DEBUG(Str, Args), error_logger:info_msg(Str, Args)).
+-define(LOG_INFO(Str), error_logger:info_msg(Str)).
+-define(LOG_INFO(Str, Args), error_logger:info_msg(Str, Args)).
 -else.
--define(dbg(Str, Args), ok).
+-define(LOG_DEBUG(Str), ok).
+-define(LOG_DEBUG(Str, Args), ok).
+-define(LOG_INFO(Str), ok).
+-define(LOG_INFO(Str, Args), ok).
+-endif.
+-define(LOG_NOTICE(Str), error_logger:info_msg(Str)).
+-define(LOG_NOTICE(Str, Args), error_logger:info_msg(Str, Args)).
+-define(LOG_WARNING(Str), error_logger:warning_msg(Str)).
+-define(LOG_WARNING(Str, Args), error_logger:warning_msg(Str, Args)).
+-define(LOG_ERROR(Str), error_logger:error_msg(Str)).
+-define(LOG_ERROR(Str, Args), error_logger:error_msg(Str, Args)).
+-else. % Use new logging API.
+-include_lib("kernel/include/logger.hrl").
+-define(debug, true).
 -endif.
 
 -define(MAX_LIFETIME, 3600000). %% 1 hour
@@ -100,6 +117,7 @@ route(Pid, Msg) ->
 %% gen_fsm callbacks
 %%====================================================================
 init([Opts]) ->
+    ok = init_logger(),
     Owner = proplists:get_value(owner, Opts),
     Username = proplists:get_value(username, Opts),
     Realm = proplists:get_value(realm, Opts),
@@ -172,9 +190,9 @@ wait_for_allocate(#stun{class = request,
 		    Lifetime = time_left(State#state.life_timer),
 		    AddrPort = stun:unmap_v4_addr(State#state.addr),
 		    RelayAddr = {RelayIP, RelayPort},
-		    ?dbg("created TURN allocation for ~s@~s from ~s: ~s",
-                         [State#state.username, State#state.realm,
-                          addr_to_str(AddrPort), addr_to_str(RelayAddr)]),
+		    ?LOG_INFO("created TURN allocation for ~s@~s from ~s: ~s",
+			      [State#state.username, State#state.realm,
+			       addr_to_str(AddrPort), addr_to_str(RelayAddr)]),
 		    R = Resp#stun{class = response,
 				  'XOR-RELAYED-ADDRESS' = RelayAddr,
 				  'LIFETIME' = Lifetime,
@@ -184,17 +202,16 @@ wait_for_allocate(#stun{class = request,
 		     NewState#state{relay_sock = RelaySock,
 				    relay_addr = RelayAddr}};
 		Err ->
-		    error_logger:error_msg(
-		      "unable to allocate relay port for ~s@~s: ~s",
-		      [State#state.username, State#state.realm,
-		       format_error(Err)]),
+		    ?LOG_ERROR("unable to allocate relay port for ~s@~s: ~s",
+			       [State#state.username, State#state.realm,
+				format_error(Err)]),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(508)},
 		    {stop, normal, send(State, R)}
 	    end
     end;
 wait_for_allocate(Event, State) ->
-    error_logger:error_msg("unexpected event in wait_for_allocate: ~p", [Event]),
+    ?LOG_ERROR("unexpected event in wait_for_allocate: ~p", [Event]),
     {next_state, wait_for_allocate, State}.
 
 active(#stun{trid = TrID}, #state{last_trid = TrID} = State) ->
@@ -297,12 +314,12 @@ active(#stun{class = request,
 		    Chans = maps:put(Channel, {Peer, TRef},
 				     State#state.channels),
 		    NewState = NewState0#state{peers = Peers, channels = Chans},
-		    ?dbg("bound/refreshed TURN channel ~.16B for user ~s@~s "
-			 "from ~s: ~s <-> ~s",
-			 [Channel, State#state.username, State#state.realm,
-			  addr_to_str(State#state.addr),
-			  addr_to_str(State#state.relay_addr),
-			  addr_to_str(Peer)]),
+		    ?LOG_INFO("bound/refreshed TURN channel ~.16B for user "
+			      "~s@~s from ~s: ~s <-> ~s",
+			      [Channel, State#state.username, State#state.realm,
+			       addr_to_str(State#state.addr),
+			       addr_to_str(State#state.relay_addr),
+			       addr_to_str(Peer)]),
 		    R = Resp#stun{class = response},
 		    {next_state, active, send(NewState, R)};
 		{error, Code} ->
@@ -327,13 +344,13 @@ active(#turn{channel = Channel, data = Data}, State) ->
 	    {next_state, active, State}
     end;
 active(Event, State) ->
-    error_logger:error_msg("got unexpected event in active: ~p", [Event]),
+    ?LOG_ERROR("got unexpected event in active: ~p", [Event]),
     {next_state, active, State}.
 
 handle_event(stop, _StateName, State) ->
     {stop, normal, State};
 handle_event(Event, StateName, State) ->
-    error_logger:error_msg("got unexpected event in ~s: ~p", [StateName, Event]),
+    ?LOG_ERROR("got unexpected event in ~s: ~p", [StateName, Event]),
     {next_state, StateName, State}.
 
 handle_sync_event(_Event, _From, StateName, State) ->
@@ -362,7 +379,7 @@ handle_info({timeout, _Tref, stop}, _StateName, State) ->
     {stop, normal, State};
 handle_info({timeout, _Tref, {permission_timeout, Addr}},
 	    StateName, State) ->
-    ?dbg("permission for ~s timed out", [addr_to_str(Addr)]),
+    ?LOG_INFO("permission for ~s timed out", [addr_to_str(Addr)]),
     case maps:find(Addr, State#state.permissions) of
 	{ok, _} ->
 	    Perms = maps:remove(Addr, State#state.permissions),
@@ -372,7 +389,7 @@ handle_info({timeout, _Tref, {permission_timeout, Addr}},
     end;
 handle_info({timeout, _Tref, {channel_timeout, Channel}},
 	    StateName, State) ->
-    ?dbg("channel ~p timed out", [Channel]),
+    ?LOG_INFO("channel ~p timed out", [Channel]),
     case maps:find(Channel, State#state.channels) of
 	{ok, {Peer, _}} ->
 	    Chans = maps:remove(Channel, State#state.channels),
@@ -385,7 +402,7 @@ handle_info({timeout, _Tref, {channel_timeout, Channel}},
 handle_info({'DOWN', _Ref, _, _, _}, _StateName, State) ->
     {stop, normal, State};
 handle_info(Info, StateName, State) ->
-    error_logger:error_msg("got unexpected info in ~p: ~p", [StateName, Info]),
+    ?LOG_ERROR("got unexpected info in ~p: ~p", [StateName, Info]),
     {next_state, StateName, State}.
 
 terminate(_Reason, _StateName, State) ->
@@ -396,9 +413,9 @@ terminate(_Reason, _StateName, State) ->
 	undefined ->
 	    ok;
 	_RAddrPort ->
-	    ?dbg("deleting TURN allocation for ~s@~s from ~s: ~s",
-                 [Username, Realm, addr_to_str(AddrPort),
-		  addr_to_str(_RAddrPort)])
+	    ?LOG_INFO("deleting TURN allocation for ~s@~s from ~s: ~s",
+		      [Username, Realm, addr_to_str(AddrPort),
+		       addr_to_str(_RAddrPort)])
     end,
     if is_pid(State#state.owner) ->
 	    stun:stop(State#state.owner);
@@ -432,12 +449,13 @@ update_permissions(#state{relay_addr = {IP, _}} = State, Addrs) ->
 			      TRef = erlang:start_timer(
 				       ?PERMISSION_LIFETIME, self(),
 				       {permission_timeout, Addr}),
-			      ?dbg("created/updated TURN permission for user "
-				   "~s@~s from ~s: ~s <-> ~s",
-				   [State#state.username, State#state.realm,
-				    addr_to_str(State#state.addr),
-				    addr_to_str(State#state.relay_addr),
-				    addr_to_str(Addr)]),
+			      ?LOG_INFO("created/updated TURN permission for "
+					"user ~s@~s from ~s: ~s <-> ~s",
+					[State#state.username,
+					 State#state.realm,
+					 addr_to_str(State#state.addr),
+					 addr_to_str(State#state.relay_addr),
+					 addr_to_str(Addr)]),
 			      maps:put(Addr, TRef, Acc)
 		      end, State#state.permissions, Addrs),
 	    {ok, State#state{permissions = Perms}};
@@ -460,7 +478,7 @@ send(State, Pkt) when is_binary(Pkt) ->
 	    end
     end;
 send(State, Msg) ->
-    ?dbg("send:~n~s", [stun_codec:pp(Msg)]),
+    ?LOG_DEBUG("send:~n~s", [stun_codec:pp(Msg)]),
     Key = State#state.key,
     case Msg of
 	#stun{class = indication} ->
@@ -601,3 +619,11 @@ prepare_response(State, Msg) ->
 	  magic = Msg#stun.magic,
 	  trid = Msg#stun.trid,
 	  'SOFTWARE' = State#state.server_name}.
+
+-ifdef(USE_OLD_LOGGER).
+init_logger() ->
+    ok.
+-else.
+init_logger() ->
+    logger:update_process_metadata(#{domain => [stun, turn]}).
+-endif.
