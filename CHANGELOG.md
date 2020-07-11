@@ -1,3 +1,8 @@
+# Version 1.0.34
+
+* Allow for binding listeners to specific IP addresses.
+* Use new logging API on Erlang/OTP 22+.
+
 # Version 1.0.33
 
 * Updating fast_tls to version 1.1.6.
