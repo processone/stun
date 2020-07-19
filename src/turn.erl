@@ -142,23 +142,30 @@ wait_for_allocate(#stun{class = request,
     IsBlacklisted = blacklisted(State),
     Resp = prepare_response(State, Msg),
     if Msg#stun.'REQUESTED-TRANSPORT' == undefined ->
+	    ?LOG_NOTICE("Rejecting allocation request: no transport requested"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
 	    {stop, normal, send(State, R)};
        Msg#stun.'REQUESTED-TRANSPORT' == unknown ->
+	    ?LOG_NOTICE("Rejecting allocation request: unsupported transport"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(442)},
 	    {stop, normal, send(State, R)};
        Msg#stun.'DONT-FRAGMENT' == true ->
+	    ?LOG_NOTICE("Rejecting allocation request: dont-fragment not "
+			"supported"),
 	    R = Resp#stun{class = error,
 			  'UNKNOWN-ATTRIBUTES' = [?STUN_ATTR_DONT_FRAGMENT],
 			  'ERROR-CODE' = stun_codec:error(420)},
 	    {stop, normal, send(State, R)};
        Family == inet6, State#state.relay_ipv6_ip == undefined ->
+	    ?LOG_NOTICE("Rejecting allocation request: IPv6 not supported"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(440)},
 	    {stop, normal, send(State, R)};
        IsBlacklisted ->
+	    ?LOG_NOTICE("Rejecting allocation request: Client address is "
+			"blacklisted"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(403)},
 	    {stop, normal, send(State, R)};
@@ -202,6 +209,7 @@ active(#stun{trid = TrID}, #state{last_trid = TrID} = State) ->
     {next_state, active, State};
 active(#stun{class = request,
 	     method = ?STUN_METHOD_ALLOCATE} = Msg, State) ->
+    ?LOG_NOTICE("Rejecting allocation request: Relay already allocated"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(437)},
@@ -210,6 +218,7 @@ active(#stun{class = request,
 	     'REQUESTED-ADDRESS-FAMILY' = ipv4,
 	     method = ?STUN_METHOD_REFRESH} = Msg,
        #state{relay_addr = {_, _, _, _, _, _, _, _}} = State) ->
+    ?LOG_NOTICE("Rejecting refresh request: IPv4 requested for IPv6 peer"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(443)},
@@ -218,6 +227,7 @@ active(#stun{class = request,
 	     'REQUESTED-ADDRESS-FAMILY' = ipv6,
 	     method = ?STUN_METHOD_REFRESH} = Msg,
        #state{relay_addr = {_, _, _, _}} = State) ->
+    ?LOG_NOTICE("Rejecting refresh request: IPv6 requested for IPv4 peer"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(443)},
@@ -227,6 +237,7 @@ active(#stun{class = request,
     Resp = prepare_response(State, Msg),
     case Msg#stun.'LIFETIME' of
 	0 ->
+	    ?LOG_INFO("Client requested closing the TURN session"),
 	    R = Resp#stun{class = response, 'LIFETIME' = 0},
 	    {stop, normal, send(State, R)};
 	LifeTime ->
@@ -253,8 +264,10 @@ active(#stun{class = request,
 	    R = Resp#stun{class = response},
 	    {next_state, active, send(NewState, R)};
 	{error, Code} ->
+	    Err = {_, Txt} = stun_codec:error(Code),
+	    ?LOG_NOTICE("Rejecting permission creation request: ~s", [Txt]),
 	    R = Resp#stun{class = error,
-			  'ERROR-CODE' = stun_codec:error(Code)},
+			  'ERROR-CODE' = Err},
 	    {next_state, active, send(State, R)}
     end;
 active(#stun{class = indication,
@@ -278,10 +291,15 @@ active(#stun{class = request,
     case {maps:find(Channel, State#state.channels),
 	  maps:find(Peer, State#state.peers)} of
 	{_, {ok, OldChannel}} when Channel /= OldChannel ->
+	    ?LOG_NOTICE("Rejecting channel binding request: Peer already bound "
+			"to a different channel (~.16B)", [OldChannel]),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
 	    {next_state, active, send(State, R)};
 	{{ok, {OldPeer, _}}, _} when Peer /= OldPeer ->
+	    ?LOG_NOTICE("Rejecting channel binding request: Channel already "
+			"bound to a different peer (~s)",
+			[stun_logger:encode_addr(OldPeer)]),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
 	    {next_state, active, send(State, R)};
@@ -306,13 +324,17 @@ active(#stun{class = request,
 		    R = Resp#stun{class = response},
 		    {next_state, active, send(NewState, R)};
 		{error, Code} ->
+		    Err = {_, Txt} = stun_codec:error(Code),
+		    ?LOG_NOTICE("Rejecting channel binding request: ~s", [Txt]),
 		    R = Resp#stun{class = error,
-				  'ERROR-CODE' = stun_codec:error(Code)},
+				  'ERROR-CODE' = Err},
 		    {next_state, active, send(State, R)}
 	    end
     end;
 active(#stun{class = request,
 	     method = ?STUN_METHOD_CHANNEL_BIND} = Msg, State) ->
+    ?LOG_NOTICE("Rejecting channel binding request: Missing channel number "
+		"and/or peer address"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(400)},

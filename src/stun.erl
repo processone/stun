@@ -211,6 +211,8 @@ process(#state{auth = anonymous} = State,
 	      'REALM' = Realm,
 	      'NONCE' = Nonce} = Msg)
   when User /= undefined, Realm /= undefined, Nonce /= undefined ->
+    ?LOG_NOTICE("Rejecting request: Credentials provided for anonymous "
+		"service"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(401)},
@@ -249,6 +251,7 @@ process(#state{auth = user} = State,
 		    end
 	    end;
 	false ->
+	    ?LOG_NOTICE("Rejecting request: Nonexistent nonce"),
 	    {NewNonce, NewNonces} = make_nonce(State#state.peer, Nonces),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(438),
@@ -260,11 +263,13 @@ process(State, #stun{class = request,
 		     'USERNAME' = User,
 		     'REALM' = undefined,
 		     'NONCE' = undefined} = Msg) when User /= undefined ->
+    ?LOG_NOTICE("Rejecting request: Missing realm and nonce"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(401)},
     send(State, R);
 process(State, #stun{class = request} = Msg) ->
+    ?LOG_NOTICE("Rejecting malformed request"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(400)},
@@ -277,10 +282,13 @@ process(State, Msg) when is_record(Msg, turn) ->
 process(State, _Msg) ->
     State.
 
-process(State, #stun{class = request, unsupported = [_|_]} = Msg, Secret) ->
+process(State, #stun{class = request, unsupported = [_|_] = Unsupported} = Msg,
+	Secret) ->
+    ?LOG_NOTICE("Rejecting request with unknown attribute(s): ~p",
+		[Unsupported]),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
-		  'UNKNOWN-ATTRIBUTES' = Msg#stun.unsupported,
+		  'UNKNOWN-ATTRIBUTES' = Unsupported,
 		  'ERROR-CODE' = stun_codec:error(420)},
     send(State, R, Secret);
 process(State, #stun{class = request,
@@ -298,6 +306,7 @@ process(State, #stun{class = request,
     send(State, R, Secret);
 process(#state{use_turn = false} = State,
 	#stun{class = request} = Msg, Secret) ->
+    ?LOG_NOTICE("Rejecting TURN request: TURN is disabled"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error, 'ERROR-CODE' = stun_codec:error(405)},
     send(State, R, Secret);
@@ -338,10 +347,12 @@ process(State, #stun{class = request,
 		    turn:route(Pid, Msg),
 		    State;
 		{error, limit} ->
+		    ?LOG_NOTICE("Rejecting request: Allocation quota reached"),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(486)},
 		    send(State, R, Secret);
 		{error, stale} ->
+		    ?LOG_NOTICE("Rejecting request: Stale nonce"),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(438)},
 		    send(State, R);
@@ -362,6 +373,7 @@ process(State, #stun{class = request,
 		    method = ?STUN_METHOD_CHANNEL_BIND} = Msg, Secret) ->
     route_on_turn(State, Msg, Secret);
 process(State, #stun{class = request} = Msg, Secret) ->
+    ?LOG_NOTICE("Rejecting request: Method not allowed"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error, 'ERROR-CODE' = stun_codec:error(405)},
     send(State, R, Secret);
@@ -435,6 +447,7 @@ route_on_turn(State, Msg, Pass) ->
 	_ ->
 	    case Msg of
 		#stun{class = request} ->
+		    ?LOG_NOTICE("Rejecting request: Allocation mismatch"),
 		    Resp = prepare_response(State, Msg),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(437)},
