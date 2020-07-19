@@ -2,6 +2,7 @@
 
 * Add session ID, transport, username, and IP addresses to log output.
 * Log number of TURN-relayed bytes and packets.
+* Log plain STUN (Binding) responses.
 
 # Version 1.0.34
 

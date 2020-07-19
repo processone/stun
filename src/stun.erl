@@ -289,8 +289,10 @@ process(State, #stun{class = request,
     AddrPort = unmap_v4_addr(State#state.peer),
     R = case stun_codec:version(Msg) of
 	    old ->
+		?LOG_INFO("Responding to 'classic' STUN request"),
 		Resp#stun{class = response, 'MAPPED-ADDRESS' = AddrPort};
 	    new ->
+		?LOG_INFO("Responding to STUN request"),
 		Resp#stun{class = response, 'XOR-MAPPED-ADDRESS' = AddrPort}
 	end,
     send(State, R, Secret);
