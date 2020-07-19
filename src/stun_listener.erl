@@ -104,8 +104,9 @@ handle_cast(_Msg, State) ->
 handle_info({'DOWN', MRef, _Type, _Pid, Info}, State) ->
     Listeners = maps:filter(
 		  fun({IP, Port, Transport}, {Ref, _, _}) when Ref == MRef ->
-			  ?LOG_ERROR("listener on ~p/~p failed: ~p",
-				     [IP, Port, Transport, Info]),
+			  ?LOG_ERROR("Listener on ~s (~s) failed: ~p",
+				     [stun_logger:encode_addr({IP, Port}),
+				      Transport, Info]),
 			  false;
 		     (_, _) ->
 			  true
@@ -171,9 +172,9 @@ accept(ListenSocket, Opts) ->
             case {inet:peername(Socket),
                   inet:sockname(Socket)} of
                 {{ok, {PeerAddr, PeerPort}}, {ok, {Addr, Port}}} ->
-		    ?LOG_INFO("accepted connection: ~s:~p -> ~s:~p",
-			      [stun_logger:encode_addr(PeerAddr), PeerPort,
-			       stun_logger:encode_addr(Addr), Port]),
+		    ?LOG_INFO("Accepting connection: ~s -> ~s",
+			      [stun_logger:encode_addr({PeerAddr, PeerPort}),
+			       stun_logger:encode_addr({Addr, Port})]),
                     case stun:start({gen_tcp, Socket}, [{session, ID}|Opts]) of
                         {ok, Pid} ->
                             gen_tcp:controlling_process(Socket, Pid);
@@ -181,7 +182,7 @@ accept(ListenSocket, Opts) ->
                             Err
                     end;
                 Err ->
-                    ?LOG_ERROR("unable to fetch peername: ~p", [Err]),
+                    ?LOG_ERROR("Cannot fetch peername: ~p", [Err]),
                     Err
             end,
             accept(ListenSocket, Opts);
@@ -194,24 +195,25 @@ udp_recv(Socket, Opts) ->
 	{ok, {Addr, Port, Packet}} ->
 	    case catch stun:udp_recv(Socket, Addr, Port, Packet, Opts) of
 		{'EXIT', Reason} ->
-		    ?LOG_ERROR("failed to process UDP packet:~n"
-			       "** Source: {~p, ~p}~n"
+		    ?LOG_ERROR("Cannot process UDP packet:~n"
+			       "** Source: ~s~n"
 			       "** Reason: ~p~n** Packet: ~p",
-			       [Addr, Port, Reason, Packet]),
+			       [stun_logger:encode_addr({Addr, Port}), Reason,
+				Packet]),
 		    udp_recv(Socket, Opts);
 		NewOpts ->
 		    udp_recv(Socket, NewOpts)
 	    end;
 	{error, Reason} ->
-	    ?LOG_ERROR("unexpected UDP error: ~s", [inet:format_error(Reason)]),
+	    ?LOG_ERROR("Unexpected UDP error: ~s", [inet:format_error(Reason)]),
 	    erlang:error(Reason)
     end.
 
 format_listener_error(IP, Port, Transport, Opts, Err) ->
-    ?LOG_ERROR("failed to start listener:~n"
-	       "** IP: ~p~n"
-	       "** Port: ~p~n"
-	       "** Transport: ~p~n"
+    ?LOG_ERROR("Cannot start listener:~n"
+	       "** IP: ~s~n"
+	       "** Port: ~B~n"
+	       "** Transport: ~s~n"
 	       "** Options: ~p~n"
 	       "** Reason: ~p",
-	       [IP, Port, Transport, Opts, Err]).
+	       [stun_logger:encode_addr(IP), Port, Transport, Opts, Err]).

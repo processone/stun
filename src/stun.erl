@@ -110,7 +110,7 @@ udp_recv(Sock, Addr, Port, Data, State) ->
     NewState = prepare_state(State, Sock, {Addr, Port}, gen_udp),
     case stun_codec:decode(Data, datagram) of
  	{ok, Msg} ->
- 	    ?LOG_DEBUG(#{verbatim => {"got:~n~s", [stun_codec:pp(Msg)]}}),
+ 	    ?LOG_DEBUG(#{verbatim => {"Received:~n~s", [stun_codec:pp(Msg)]}}),
  	    process(NewState, Msg);
  	_ ->
 	    NewState
@@ -139,7 +139,7 @@ init([Sock, Opts]) ->
     end.
 
 session_established(Event, State) ->
-    ?LOG_ERROR("unexpected event in session_established: ~p", [Event]),
+    ?LOG_ERROR("Unexpected event in 'session_established': ~p", [Event]),
     {next_state, session_established, State}.
 
 handle_event(stop, _StateName, State) ->
@@ -163,10 +163,10 @@ handle_info({tcp, _Sock, Data}, StateName, State) ->
     NewState = update_shaper(State, Data),
     process_data(StateName, NewState, Data);
 handle_info({tcp_closed, _Sock}, _StateName, State) ->
-    ?LOG_INFO("connection reset by peer", []),
+    ?LOG_INFO("Connection reset by peer"),
     {stop, normal, State};
 handle_info({tcp_error, _Sock, _Reason}, _StateName, State) ->
-    ?LOG_INFO("connection error: ~p", [_Reason]),
+    ?LOG_INFO("Connection error: ~p", [_Reason]),
     {stop, normal, State};
 handle_info({timeout, TRef, stop}, _StateName,
 	    #state{tref = TRef} = State) ->
@@ -175,7 +175,7 @@ handle_info({timeout, _TRef, activate}, StateName, State) ->
     activate_socket(State),
     {next_state, StateName, State};
 handle_info(Info, StateName, State) ->
-    ?LOG_ERROR("unexpected info: ~p", [Info]),
+    ?LOG_ERROR("Unexpected info in '~s': ~p", [StateName, Info]),
     {next_state, StateName, State}.
 
 terminate(_Reason, _StateName, State) ->
@@ -233,17 +233,18 @@ process(#state{auth = user} = State,
 			  'NONCE' = Nonce},
 	    case (State#state.auth_fun)(User, Realm) of
 		<<"">> ->
-		    ?LOG_NOTICE("Failed long-term STUN authentication"),
+		    ?LOG_NOTICE("Failed long-term STUN/TURN authentication"),
 		    send(NewState, R);
 		Pass ->
 		    Key = {User, Realm, Pass},
 		    case stun_codec:check_integrity(Msg, Key) of
 			true ->
-			    ?LOG_NOTICE("Accepted long-term STUN "
+			    ?LOG_NOTICE("Accepting long-term STUN/TURN "
 					"authentication"),
 			    process(NewState, Msg, Key);
 			false ->
-			    ?LOG_NOTICE("Failed long-term STUN authentication"),
+			    ?LOG_NOTICE("Failed long-term STUN/TURN "
+					"authentication"),
 			    send(NewState, R)
 		    end
 	    end;
@@ -343,7 +344,7 @@ process(State, #stun{class = request,
 				  'ERROR-CODE' = stun_codec:error(438)},
 		    send(State, R);
 		Err ->
-		    ?LOG_ERROR("failed to start turn session: ~p", [Err]),
+		    ?LOG_ERROR("Cannot start TURN session: ~p", [Err]),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(500)},
 		    send(State, R, Secret)
@@ -369,7 +370,7 @@ process_data(NextStateName, #state{buf = Buf} = State, Data) ->
     NewBuf = <<Buf/binary, Data/binary>>,
     case stun_codec:decode(NewBuf, stream) of
 	{ok, Msg, Tail} ->
- 	    ?LOG_DEBUG(#{verbatim => {"got:~n~s", [stun_codec:pp(Msg)]}}),
+ 	    ?LOG_DEBUG(#{verbatim => {"Received:~n~s", [stun_codec:pp(Msg)]}}),
 	    NewState = process(State, Msg),
 	    process_data(NextStateName, NewState#state{buf = <<>>}, Tail);
 	empty ->
@@ -411,7 +412,7 @@ send(State, Msg) ->
 send(State, Msg, {_JID, Pass}) ->
     send(State, Msg, Pass);
 send(State, Msg, Pass) ->
-    ?LOG_DEBUG(#{verbatim => {"send:~n~s", [stun_codec:pp(Msg)]}}),
+    ?LOG_DEBUG(#{verbatim => {"Sending:~n~s", [stun_codec:pp(Msg)]}}),
     case Msg of
 	#stun{class = indication} ->
 	    send(State, stun_codec:encode(Msg, undefined));
@@ -457,10 +458,10 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 			  {ok, Addr} ->
 			      ?LOG_WARNING("'turn_ip' is deprecated, specify "
 					   "'turn_ipv4_address' and optionally "
-					   "'turn_ipv6_address' instead", []),
+					   "'turn_ipv6_address' instead"),
 			      State#state{relay_ipv4_ip = Addr};
 			  {error, _} ->
-			      ?LOG_ERROR("wrong 'turn_ip' value: ~p", [IP]),
+			      ?LOG_ERROR("Wrong 'turn_ip' value: ~p", [IP]),
 			      State
 		      end;
 		 ({turn_ipv4_address, IP}, State) ->
@@ -468,7 +469,7 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 			  {ok, Addr} ->
 			      State#state{relay_ipv4_ip = Addr};
 			  {error, _} ->
-			      ?LOG_ERROR("wrong 'turn_ipv4_address' value: ~p",
+			      ?LOG_ERROR("Wrong 'turn_ipv4_address' value: ~p",
 					 [IP]),
 			      State
 		      end;
@@ -477,7 +478,7 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 			  {ok, Addr} ->
 			      State#state{relay_ipv6_ip = Addr};
 			  {error, _} ->
-			      ?LOG_ERROR("wrong 'turn_ipv6_address' value: ~p",
+			      ?LOG_ERROR("Wrong 'turn_ipv6_address' value: ~p",
 					 [IP]),
 			      State
 		      end;
@@ -485,26 +486,26 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		    when is_integer(Min), Min > 1024, Min < 65536 ->
 		      State#state{min_port = Min};
 		 ({turn_min_port, Wrong}, State) ->
-		      ?LOG_ERROR("wrong 'turn_min_port' value: ~p", [Wrong]),
+		      ?LOG_ERROR("Wrong 'turn_min_port' value: ~p", [Wrong]),
 		      State;
 		 ({turn_max_port, Max}, State)
 		    when is_integer(Max), Max > 1024, Max < 65536 ->
 		      State#state{max_port = Max};
 		 ({turn_max_port, Wrong}, State) ->
-		      ?LOG_ERROR("wrong 'turn_max_port' value: ~p", [Wrong]),
+		      ?LOG_ERROR("Wrong 'turn_max_port' value: ~p", [Wrong]),
 		      State;
 		 ({turn_max_allocations, N}, State)
 		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
 		      State#state{max_allocs = N};
 		 ({turn_max_allocations, Wrong}, State) ->
-		      ?LOG_ERROR("wrong 'turn_max_allocations' value: ~p",
+		      ?LOG_ERROR("Wrong 'turn_max_allocations' value: ~p",
 				 [Wrong]),
 		      State;
 		 ({turn_max_permissions, N}, State)
 		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
 		      State#state{max_permissions = N};
 		 ({turn_max_permissions, Wrong}, State) ->
-		      ?LOG_ERROR("wrong 'turn_max_permissions' value: ~p",
+		      ?LOG_ERROR("Wrong 'turn_max_permissions' value: ~p",
 				 [Wrong]),
 		      State;
 		 ({turn_blacklist, B}, State) ->
@@ -512,7 +513,7 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 			  true ->
 			      State#state{blacklist = B};
 			  false ->
-			      ?LOG_ERROR("wrong 'turn_blacklist' value: ~p",
+			      ?LOG_ERROR("Wrong 'turn_blacklist' value: ~p",
 					 [B]),
 			      State
 		      end;
@@ -520,33 +521,33 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		    when S == none orelse (is_integer(S) andalso (S > 0)) ->
 		      State#state{shaper = stun_shaper:new(S)};
 		 ({shaper, Wrong}, State) ->
-		      ?LOG_ERROR("wrong 'shaper' value: ~p", [Wrong]),
+		      ?LOG_ERROR("Wrong 'shaper' value: ~p", [Wrong]),
 		      State;
 		 ({server_name, S}, State) ->
 		      try
 			  State#state{server_name = iolist_to_binary(S)}
 		      catch _:_ ->
-			      ?LOG_ERROR("wrong 'server_name' value: ~p", [S]),
+			      ?LOG_ERROR("Wrong 'server_name' value: ~p", [S]),
 			      State
 		      end;
 		 ({auth_realm, R}, State) ->
 		      try
 			  State#state{realm = iolist_to_binary(R)}
 		      catch _:_ ->
-			      ?LOG_ERROR("wrong 'auth_realm' value: ~p", [R]),
+			      ?LOG_ERROR("Wrong 'auth_realm' value: ~p", [R]),
 			      State
 		      end;
 		 ({auth_fun, F}, State) when is_function(F) ->
 		      State#state{auth_fun = F};
 		 ({auth_fun, Wrong}, State) ->
-		      ?LOG_ERROR("wrong 'auth_fun' value: ~p", [Wrong]),
+		      ?LOG_ERROR("Wrong 'auth_fun' value: ~p", [Wrong]),
 		      State;
 		 ({auth_type, anonymous}, State) ->
 		      State#state{auth = anonymous};
 		 ({auth_type, user}, State) ->
 		      State#state{auth = user};
 		 ({auth_type, Wrong}, State) ->
-		      ?LOG_ERROR("wrong 'auth_type' value: ~p", [Wrong]),
+		      ?LOG_ERROR("Wrong 'auth_type' value: ~p", [Wrong]),
 		      State;
 		 ({use_turn, _}, State) -> State;
 		 (use_turn, State) -> State;
@@ -558,7 +559,7 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 (tls, State) -> State;
 		 ({session, _}, State) -> State;
 		 (Opt, State) ->
-		      ?LOG_ERROR("ignoring unknown option ~p", [Opt]),
+		      ?LOG_ERROR("Ignoring unknown option '~p'", [Opt]),
 		      State
 	      end,
 	      #state{session = ID, peer = Peer, sock = Sock,
@@ -680,7 +681,7 @@ get_certfile(Opts) ->
     end.
 
 maybe_starttls(_Sock, fast_tls, undefined) ->
-    ?LOG_ERROR("Failed to start TLS connection: option 'certfile' is not set"),
+    ?LOG_ERROR("Cannot start TLS connection: option 'certfile' is not set"),
     {error, eprotonosupport};
 maybe_starttls(Sock, fast_tls, CertFile) ->
     fast_tls:tcp_to_tls(Sock, [{certfile, CertFile}]);

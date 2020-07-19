@@ -171,7 +171,8 @@ wait_for_allocate(#stun{class = request,
 		    RelayAddr = {RelayIP, RelayPort},
 		    stun_logger:add_metadata(
 		      #{stun_relay => stun_logger:encode_addr(RelayAddr)}),
-		    ?LOG_INFO("created TURN allocation"),
+		    ?LOG_INFO("Creating TURN allocation (lifetime: ~B seconds)",
+			      [Lifetime]),
 		    R = Resp#stun{class = response,
 				  'XOR-RELAYED-ADDRESS' = RelayAddr,
 				  'LIFETIME' = Lifetime,
@@ -189,7 +190,7 @@ wait_for_allocate(#stun{class = request,
 	    end
     end;
 wait_for_allocate(Event, State) ->
-    ?LOG_ERROR("unexpected event in wait_for_allocate: ~p", [Event]),
+    ?LOG_ERROR("Unexpected event in 'wait_for_allocate': ~p", [Event]),
     {next_state, wait_for_allocate, State}.
 
 active(#stun{trid = TrID}, #state{last_trid = TrID} = State) ->
@@ -231,6 +232,8 @@ active(#stun{class = request,
 		       true ->
 			    lists:min([LifeTime*1000, ?MAX_LIFETIME])
 		    end,
+	    ?LOG_INFO("Refreshing TURN allocation (lifetime: ~B seconds)",
+		      [MSecs div 1000]),
 	    TRef = erlang:start_timer(MSecs, self(), stop),
 	    R = Resp#stun{class = response,
 			  'LIFETIME' = (MSecs div 1000)},
@@ -283,9 +286,9 @@ active(#stun{class = request,
 		    _Op = case FindResult of
 			      {ok, {_, OldTRef}} ->
 				  cancel_timer(OldTRef),
-				  maybe_log(<<"Refreshed">>);
+				  maybe_log(<<"Refreshing">>);
 			      _ ->
-				  maybe_log(<<"Bound">>)
+				  maybe_log(<<"Binding">>)
 			  end,
 		    TRef = erlang:start_timer(?CHANNEL_LIFETIME, self(),
 					      {channel_timeout, Channel}),
@@ -319,13 +322,13 @@ active(#turn{channel = Channel, data = Data}, State) ->
 	    {next_state, active, State}
     end;
 active(Event, State) ->
-    ?LOG_ERROR("got unexpected event in active: ~p", [Event]),
+    ?LOG_ERROR("Unexpected event in 'active': ~p", [Event]),
     {next_state, active, State}.
 
 handle_event(stop, _StateName, State) ->
     {stop, normal, State};
 handle_event(Event, StateName, State) ->
-    ?LOG_ERROR("got unexpected event in ~s: ~p", [StateName, Event]),
+    ?LOG_ERROR("Unexpected event in '~s': ~p", [StateName, Event]),
     {next_state, StateName, State}.
 
 handle_sync_event(_Event, _From, StateName, State) ->
@@ -354,7 +357,7 @@ handle_info({timeout, _Tref, stop}, _StateName, State) ->
     {stop, normal, State};
 handle_info({timeout, _Tref, {permission_timeout, Addr}},
 	    StateName, State) ->
-    ?LOG_INFO("permission for ~s timed out",
+    ?LOG_INFO("TURN permission for ~s timed out",
 	      [stun_logger:encode_addr(Addr)]),
     case maps:find(Addr, State#state.permissions) of
 	{ok, _} ->
@@ -365,9 +368,10 @@ handle_info({timeout, _Tref, {permission_timeout, Addr}},
     end;
 handle_info({timeout, _Tref, {channel_timeout, Channel}},
 	    StateName, State) ->
-    ?LOG_INFO("channel ~p timed out", [Channel]),
     case maps:find(Channel, State#state.channels) of
 	{ok, {Peer, _}} ->
+	    ?LOG_INFO("TURN channel ~.16B for peer ~s timed out",
+		      [Channel, stun_logger:encode_addr(Peer)]),
 	    Chans = maps:remove(Channel, State#state.channels),
 	    Peers = maps:remove(Peer, State#state.peers),
 	    {next_state, StateName, State#state{channels = Chans,
@@ -378,7 +382,7 @@ handle_info({timeout, _Tref, {channel_timeout, Channel}},
 handle_info({'DOWN', _Ref, _, _, _}, _StateName, State) ->
     {stop, normal, State};
 handle_info(Info, StateName, State) ->
-    ?LOG_ERROR("got unexpected info in ~p: ~p", [StateName, Info]),
+    ?LOG_ERROR("Unexpected info in '~s': ~p", [StateName, Info]),
     {next_state, StateName, State}.
 
 terminate(_Reason, _StateName, State) ->
@@ -417,9 +421,9 @@ update_permissions(#state{relay_addr = {IP, _}} = State, Addrs) ->
 			      _Op = case maps:find(Addr, Acc) of
 					{ok, OldTRef} ->
 					    cancel_timer(OldTRef),
-					    maybe_log(<<"Updated">>);
+					    maybe_log(<<"Refreshing">>);
 					error ->
-					    maybe_log(<<"Created">>)
+					    maybe_log(<<"Creating">>)
 				    end,
 			      TRef = erlang:start_timer(
 				       ?PERMISSION_LIFETIME, self(),
@@ -443,12 +447,15 @@ send(State, Pkt) when is_binary(Pkt) ->
 	    gen_udp:send(Sock, Addr, Port, Pkt);
        true ->
 	    case SockMod:send(Sock, Pkt) of
-		ok -> ok;
-		_  -> exit(normal)
+		ok ->
+		    ok;
+		_  ->
+		    ?LOG_INFO("Cannot respond to client: Connection closed"),
+		    exit(normal)
 	    end
     end;
 send(State, Msg) ->
-    ?LOG_DEBUG(#{verbatim => {"send:~n~s", [stun_codec:pp(Msg)]}}),
+    ?LOG_DEBUG(#{verbatim => {"Sending:~n~s", [stun_codec:pp(Msg)]}}),
     Key = State#state.key,
     case Msg of
 	#stun{class = indication} ->
