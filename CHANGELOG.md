@@ -1,6 +1,7 @@
 # Version 1.0.35
 
 * Add session ID, transport, username, and IP addresses to log output.
+* Log number of TURN-relayed bytes and packets.
 
 # Version 1.0.34
 

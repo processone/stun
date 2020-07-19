@@ -73,7 +73,11 @@
 	 last_pkt = <<>>                :: binary(),
 	 seq = 1                        :: non_neg_integer(),
 	 life_timer                     :: reference(),
-	 blacklist                      :: blacklist()}).
+	 blacklist                      :: blacklist(),
+	 received_size = 0              :: non_neg_integer(),
+	 received_pkts = 0              :: non_neg_integer(),
+	 sent_size = 0                  :: non_neg_integer(),
+	 sent_pkts = 0                  :: non_neg_integer()}).
 
 %%====================================================================
 %% API
@@ -257,13 +261,14 @@ active(#stun{class = indication,
 	     method = ?STUN_METHOD_SEND,
 	     'XOR-PEER-ADDRESS' = [{Addr, Port}],
 	     'DATA' = Data}, State) when is_binary(Data) ->
-    case maps:find(Addr, State#state.permissions) of
-	{ok, _} ->
-	    gen_udp:send(State#state.relay_sock, Addr, Port, Data);
-	error ->
-	    ok
-    end,
-    {next_state, active, State};
+    State1 = case maps:find(Addr, State#state.permissions) of
+		 {ok, _} ->
+		     gen_udp:send(State#state.relay_sock, Addr, Port, Data),
+		     count_sent(State, Data);
+		 error ->
+		     State
+	     end,
+    {next_state, active, State1};
 active(#stun{class = request,
 	     'CHANNEL-NUMBER' = Channel,
 	     'XOR-PEER-ADDRESS' = [{Addr, _Port} = Peer],
@@ -317,7 +322,8 @@ active(#turn{channel = Channel, data = Data}, State) ->
 	{ok, {{Addr, Port}, _}} ->
 	    gen_udp:send(State#state.relay_sock,
 			 Addr, Port, Data),
-	    {next_state, active, State};
+	    State1 = count_sent(State, Data),
+	    {next_state, active, State1};
 	error ->
 	    {next_state, active, State}
     end;
@@ -341,7 +347,8 @@ handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
 	  maps:find(Peer, State#state.peers)} of
 	{{ok, _}, {ok, Channel}} ->
 	    TurnMsg = #turn{channel = Channel, data = Data},
-	    {next_state, StateName, send(State, TurnMsg)};
+	    State1 = count_received(State, Data),
+	    {next_state, StateName, send(State1, TurnMsg)};
 	{{ok, _}, error} ->
 	    Seq = State#state.seq,
 	    Ind = #stun{class = indication,
@@ -349,7 +356,8 @@ handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
 			trid = Seq,
 			'XOR-PEER-ADDRESS' = [Peer],
 			'DATA' = Data},
-	    {next_state, StateName, send(State#state{seq = Seq+1}, Ind)};
+	    State1 = count_received(State, Data),
+	    {next_state, StateName, send(State1#state{seq = Seq+1}, Ind)};
 	{error, _} ->
 	    {next_state, StateName, State}
     end;
@@ -389,6 +397,10 @@ terminate(_Reason, _StateName, State) ->
     AddrPort = State#state.addr,
     Username = State#state.username,
     Realm = State#state.realm,
+    ReceivedSize = State#state.received_size,
+    ReceivedPkts = State#state.received_pkts,
+    SentSize = State#state.sent_size,
+    SentPkts = State#state.sent_pkts,
     case State#state.relay_addr of
 	undefined ->
 	    ok;
@@ -400,6 +412,9 @@ terminate(_Reason, _StateName, State) ->
        true ->
 	    ok
     end,
+    ?LOG_INFO("Relayed ~B KiB (in: ~B B / ~B packets, out: ~B B / ~B packets)",
+	      [round((ReceivedSize + SentSize) / 1024), ReceivedSize,
+	       ReceivedPkts, SentSize, SentPkts]),
     turn_sm:del_allocation(AddrPort, Username, Realm).
 
 code_change(_OldVsn, StateName, State, _Extra) ->
@@ -587,6 +602,16 @@ prepare_response(State, Msg) ->
 	  magic = Msg#stun.magic,
 	  trid = Msg#stun.trid,
 	  'SOFTWARE' = State#state.server_name}.
+
+count_sent(#state{sent_size = SendSize,
+		  sent_pkts = SendPkts} = State, Data) ->
+    State#state{sent_size = SendSize + byte_size(Data),
+		sent_pkts = SendPkts + 1}.
+
+count_received(#state{received_size = RecvSize,
+		      received_pkts = RecvPkts} = State, Data) ->
+    State#state{received_size = RecvSize + byte_size(Data),
+		received_pkts = RecvPkts + 1}.
 
 -ifdef(USE_OLD_LOGGER).
 -ifdef(debug).
