@@ -52,7 +52,7 @@
 
 -record(state,
 	{sock_mod = gen_udp             :: gen_udp | gen_tcp | fast_tls,
-	 sock                           :: inet:socket() | fast_tls:tls_socket(),
+	 sock                           :: inet:socket() | fast_tls:tls_socket() | undefined,
 	 addr = {{0,0,0,0}, 0}          :: addr(),
 	 owner = self()                 :: pid(),
 	 username = <<"">>              :: binary(),
@@ -62,18 +62,18 @@
 	 peers = #{}                    :: map(),
 	 channels = #{}                 :: map(),
 	 permissions = #{}              :: map(),
-	 max_permissions                :: non_neg_integer() | atom(),
+	 max_permissions                :: non_neg_integer() | atom() | undefined,
 	 relay_ipv4_ip = {127,0,0,1}    :: inet:ip4_address(),
-	 relay_ipv6_ip                  :: inet:ip6_address(),
+	 relay_ipv6_ip                  :: inet:ip6_address() | undefined,
 	 min_port = 49152               :: non_neg_integer(),
 	 max_port = 65535               :: non_neg_integer(),
-	 relay_addr                     :: addr(),
-	 relay_sock                     :: inet:socket(),
-	 last_trid                      :: non_neg_integer(),
+	 relay_addr                     :: addr() | undefined,
+	 relay_sock                     :: inet:socket() | undefined,
+	 last_trid                      :: non_neg_integer() | undefined,
 	 last_pkt = <<>>                :: binary(),
 	 seq = 1                        :: non_neg_integer(),
-	 life_timer                     :: reference(),
-	 blacklist                      :: blacklist(),
+	 life_timer                     :: reference() | undefined,
+	 blacklist                      :: blacklist() | undefined,
 	 received_size = 0              :: non_neg_integer(),
 	 received_pkts = 0              :: non_neg_integer(),
 	 sent_size = 0                  :: non_neg_integer(),
@@ -126,9 +126,12 @@ init([Opts]) ->
     TRef = erlang:start_timer(?DEFAULT_LIFETIME, self(), stop),
     case turn_sm:add_allocation(AddrPort, Username, Realm, MaxAllocs, self()) of
 	ok ->
-	    {ok, wait_for_allocate, State#state{life_timer = TRef}};
-	{error, Reason} ->
-	    {stop, Reason}
+	    {ok, wait_for_allocate, State#state{life_timer = TRef}}
+	%%
+	%% turn_sm:add_allocation/5 currently doesn't return errors.
+	%%
+	%% {error, Reason} ->
+	%%     {stop, Reason}
     end.
 
 wait_for_allocate(#stun{class = request,
@@ -217,7 +220,7 @@ active(#stun{class = request,
 active(#stun{class = request,
 	     'REQUESTED-ADDRESS-FAMILY' = ipv4,
 	     method = ?STUN_METHOD_REFRESH} = Msg,
-       #state{relay_addr = {_, _, _, _, _, _, _, _}} = State) ->
+       #state{relay_addr = {{_, _, _, _, _, _, _, _}, _}} = State) ->
     ?LOG_NOTICE("Rejecting refresh request: IPv4 requested for IPv6 peer"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
@@ -226,7 +229,7 @@ active(#stun{class = request,
 active(#stun{class = request,
 	     'REQUESTED-ADDRESS-FAMILY' = ipv6,
 	     method = ?STUN_METHOD_REFRESH} = Msg,
-       #state{relay_addr = {_, _, _, _}} = State) ->
+       #state{relay_addr = {{_, _, _, _}, _}} = State) ->
     ?LOG_NOTICE("Rejecting refresh request: IPv6 requested for IPv4 peer"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,

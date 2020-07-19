@@ -63,14 +63,14 @@
 -type addr() :: {inet:ip_address(), inet:port_number()}.
 
 -record(state,
-	{sock                        :: inet:socket() | fast_tls:tls_socket(),
+	{sock                        :: inet:socket() | fast_tls:tls_socket() | undefined,
 	 sock_mod = gen_tcp          :: gen_udp | gen_tcp | fast_tls,
-	 certfile                    :: iodata(),
+	 certfile                    :: iodata() | undefined,
 	 peer = {{0,0,0,0}, 0}       :: addr(),
-	 tref = make_ref()           :: reference(),
+	 tref                        :: reference() | undefined,
 	 use_turn = false            :: boolean(),
 	 relay_ipv4_ip = {127,0,0,1} :: inet:ip4_address(),
-	 relay_ipv6_ip               :: inet:ip6_address(),
+	 relay_ipv6_ip               :: inet:ip6_address() | undefined,
 	 min_port = 49152            :: non_neg_integer(),
 	 max_port = 65535            :: non_neg_integer(),
 	 max_allocs = 10             :: non_neg_integer() | infinity,
@@ -80,10 +80,10 @@
 	 auth = user                 :: anonymous | user,
 	 nonces = treap:empty()      :: treap:treap(),
 	 realm = <<"">>              :: binary(),
-	 auth_fun                    :: function(),
+	 auth_fun                    :: function() | undefined,
 	 server_name = ?SERVER_NAME  :: binary(),
 	 buf = <<>>                  :: binary(),
-	 session                     :: binary()}).
+	 session                     :: binary() | undefined}).
 
 %%====================================================================
 %% API
@@ -135,7 +135,7 @@ init([Sock, Opts]) ->
 		    {stop, Why}
 	    end;
 	Err ->
-	    Err
+	    {stop, Err}
     end.
 
 session_established(Event, State) ->
@@ -376,9 +376,7 @@ process(State, #stun{class = request} = Msg, Secret) ->
     ?LOG_NOTICE("Rejecting request: Method not allowed"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error, 'ERROR-CODE' = stun_codec:error(405)},
-    send(State, R, Secret);
-process(State, _Msg, _Secret) ->
-    State.
+    send(State, R, Secret).
 
 process_data(NextStateName, #state{buf = Buf} = State, Data) ->
     NewBuf = <<Buf/binary, Data/binary>>,
@@ -423,22 +421,13 @@ send(State, Data) when is_binary(Data) ->
 send(State, Msg) ->
     send(State, Msg, undefined).
 
-send(State, Msg, {_JID, Pass}) ->
-    send(State, Msg, Pass);
 send(State, Msg, Pass) ->
     ?LOG_DEBUG(#{verbatim => {"Sending:~n~s", [stun_codec:pp(Msg)]}}),
-    case Msg of
-	#stun{class = indication} ->
-	    send(State, stun_codec:encode(Msg, undefined));
-	_ ->
-	    send(State, stun_codec:encode(Msg, Pass))
-    end.
+    send(State, stun_codec:encode(Msg, Pass)).
 
 route_on_turn(State, Msg) ->
     route_on_turn(State, Msg, undefined).
 
-route_on_turn(State, Msg, {_JID, Pass}) ->
-    route_on_turn(State, Msg, Pass);
 route_on_turn(State, Msg, Pass) ->
     case turn_sm:find_allocation(State#state.peer) of
 	{ok, Pid} ->
