@@ -1,3 +1,7 @@
+# Version 1.0.35
+
+* Add session ID, transport, username, and IP addresses to log output.
+
 # Version 1.0.34
 
 * Allow for binding listeners to specific IP addresses.

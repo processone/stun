@@ -49,6 +49,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
+    stun_logger:start(),
     application:start(fast_tls),
     case stun_sup:start_link() of
         {ok, Pid} ->
@@ -68,6 +69,7 @@ start(_StartType, _StartArgs) ->
 %% @end
 %%--------------------------------------------------------------------
 stop(_State) ->
+    stun_logger:stop(),
     ok.
 
 %%%===================================================================

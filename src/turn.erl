@@ -37,30 +37,7 @@
 -export([wait_for_allocate/2, active/2]).
 
 -include("stun.hrl").
-
--ifdef(USE_OLD_LOGGER).
-%%-define(debug, true).
--ifdef(debug).
--define(LOG_DEBUG(Str), error_logger:info_msg(Str)).
--define(LOG_DEBUG(Str, Args), error_logger:info_msg(Str, Args)).
--define(LOG_INFO(Str), error_logger:info_msg(Str)).
--define(LOG_INFO(Str, Args), error_logger:info_msg(Str, Args)).
--else.
--define(LOG_DEBUG(Str), ok).
--define(LOG_DEBUG(Str, Args), ok).
--define(LOG_INFO(Str), ok).
--define(LOG_INFO(Str, Args), ok).
--endif.
--define(LOG_NOTICE(Str), error_logger:info_msg(Str)).
--define(LOG_NOTICE(Str, Args), error_logger:info_msg(Str, Args)).
--define(LOG_WARNING(Str), error_logger:warning_msg(Str)).
--define(LOG_WARNING(Str, Args), error_logger:warning_msg(Str, Args)).
--define(LOG_ERROR(Str), error_logger:error_msg(Str)).
--define(LOG_ERROR(Str, Args), error_logger:error_msg(Str, Args)).
--else. % Use new logging API.
--include_lib("kernel/include/logger.hrl").
--define(debug, true).
--endif.
+-include("stun_logger.hrl").
 
 -define(MAX_LIFETIME, 3600000). %% 1 hour
 -define(DEFAULT_LIFETIME, 600000). %% 10 minutes
@@ -117,12 +94,13 @@ route(Pid, Msg) ->
 %% gen_fsm callbacks
 %%====================================================================
 init([Opts]) ->
-    ok = init_logger(),
+    ID = proplists:get_value(session, Opts),
     Owner = proplists:get_value(owner, Opts),
     Username = proplists:get_value(username, Opts),
     Realm = proplists:get_value(realm, Opts),
     AddrPort = proplists:get_value(addr, Opts),
-    State = #state{sock_mod = proplists:get_value(sock_mod, Opts),
+    SockMod = proplists:get_value(sock_mod, Opts),
+    State = #state{sock_mod = SockMod,
 		   sock = proplists:get_value(sock, Opts),
 		   key = proplists:get_value(key, Opts),
 		   relay_ipv4_ip = proplists:get_value(relay_ipv4_ip, Opts),
@@ -134,6 +112,7 @@ init([Opts]) ->
 		   server_name = proplists:get_value(server_name, Opts),
 		   realm = Realm, addr = AddrPort,
 		   username = Username, owner = Owner},
+    stun_logger:set_metadata(turn, SockMod, ID, AddrPort, Username),
     MaxAllocs = proplists:get_value(max_allocs, Opts),
     if is_pid(Owner) ->
 	    erlang:monitor(process, Owner);
@@ -190,9 +169,9 @@ wait_for_allocate(#stun{class = request,
 		    Lifetime = time_left(State#state.life_timer),
 		    AddrPort = stun:unmap_v4_addr(State#state.addr),
 		    RelayAddr = {RelayIP, RelayPort},
-		    ?LOG_INFO("created TURN allocation for ~s@~s from ~s: ~s",
-			      [State#state.username, State#state.realm,
-			       addr_to_str(AddrPort), addr_to_str(RelayAddr)]),
+		    stun_logger:add_metadata(
+		      #{stun_relay => stun_logger:encode_addr(RelayAddr)}),
+		    ?LOG_INFO("created TURN allocation"),
 		    R = Resp#stun{class = response,
 				  'XOR-RELAYED-ADDRESS' = RelayAddr,
 				  'LIFETIME' = Lifetime,
@@ -202,9 +181,8 @@ wait_for_allocate(#stun{class = request,
 		     NewState#state{relay_sock = RelaySock,
 				    relay_addr = RelayAddr}};
 		Err ->
-		    ?LOG_ERROR("unable to allocate relay port for ~s@~s: ~s",
-			       [State#state.username, State#state.realm,
-				format_error(Err)]),
+		    ?LOG_ERROR("Cannot allocate TURN relay: ~s",
+			       [format_error(Err)]),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(508)},
 		    {stop, normal, send(State, R)}
@@ -302,24 +280,21 @@ active(#stun{class = request,
 	{FindResult, _} ->
 	    case update_permissions(State, [Addr]) of
 		{ok, NewState0} ->
-		    case FindResult of
-			{ok, {_, OldTRef}} ->
-			    cancel_timer(OldTRef);
-			_ ->
-			    ok
-		    end,
+		    _Op = case FindResult of
+			      {ok, {_, OldTRef}} ->
+				  cancel_timer(OldTRef),
+				  maybe_log(<<"Refreshed">>);
+			      _ ->
+				  maybe_log(<<"Bound">>)
+			  end,
 		    TRef = erlang:start_timer(?CHANNEL_LIFETIME, self(),
 					      {channel_timeout, Channel}),
 		    Peers = maps:put(Peer, Channel, State#state.peers),
 		    Chans = maps:put(Channel, {Peer, TRef},
 				     State#state.channels),
 		    NewState = NewState0#state{peers = Peers, channels = Chans},
-		    ?LOG_INFO("bound/refreshed TURN channel ~.16B for user "
-			      "~s@~s from ~s: ~s <-> ~s",
-			      [Channel, State#state.username, State#state.realm,
-			       addr_to_str(State#state.addr),
-			       addr_to_str(State#state.relay_addr),
-			       addr_to_str(Peer)]),
+		    ?LOG_INFO("~s TURN channel ~.16B for peer ~s",
+			      [_Op, Channel, stun_logger:encode_addr(Peer)]),
 		    R = Resp#stun{class = response},
 		    {next_state, active, send(NewState, R)};
 		{error, Code} ->
@@ -379,7 +354,8 @@ handle_info({timeout, _Tref, stop}, _StateName, State) ->
     {stop, normal, State};
 handle_info({timeout, _Tref, {permission_timeout, Addr}},
 	    StateName, State) ->
-    ?LOG_INFO("permission for ~s timed out", [addr_to_str(Addr)]),
+    ?LOG_INFO("permission for ~s timed out",
+	      [stun_logger:encode_addr(Addr)]),
     case maps:find(Addr, State#state.permissions) of
 	{ok, _} ->
 	    Perms = maps:remove(Addr, State#state.permissions),
@@ -413,9 +389,7 @@ terminate(_Reason, _StateName, State) ->
 	undefined ->
 	    ok;
 	_RAddrPort ->
-	    ?LOG_INFO("deleting TURN allocation for ~s@~s from ~s: ~s",
-		      [Username, Realm, addr_to_str(AddrPort),
-		       addr_to_str(_RAddrPort)])
+	    ?LOG_INFO("Deleting TURN allocation")
     end,
     if is_pid(State#state.owner) ->
 	    stun:stop(State#state.owner);
@@ -440,22 +414,18 @@ update_permissions(#state{relay_addr = {IP, _}} = State, Addrs) ->
 	{true, false} ->
 	    Perms = lists:foldl(
 		      fun(Addr, Acc) ->
-			      case maps:find(Addr, Acc) of
-				  {ok, OldTRef} ->
-				      cancel_timer(OldTRef);
-				  error ->
-				      ok
-			      end,
+			      _Op = case maps:find(Addr, Acc) of
+					{ok, OldTRef} ->
+					    cancel_timer(OldTRef),
+					    maybe_log(<<"Updated">>);
+					error ->
+					    maybe_log(<<"Created">>)
+				    end,
 			      TRef = erlang:start_timer(
 				       ?PERMISSION_LIFETIME, self(),
 				       {permission_timeout, Addr}),
-			      ?LOG_INFO("created/updated TURN permission for "
-					"user ~s@~s from ~s: ~s <-> ~s",
-					[State#state.username,
-					 State#state.realm,
-					 addr_to_str(State#state.addr),
-					 addr_to_str(State#state.relay_addr),
-					 addr_to_str(Addr)]),
+			      ?LOG_INFO("~s TURN permission for ~s",
+					[_Op, stun_logger:encode_addr(Addr)]),
 			      maps:put(Addr, TRef, Acc)
 		      end, State#state.permissions, Addrs),
 	    {ok, State#state{permissions = Perms}};
@@ -478,7 +448,7 @@ send(State, Pkt) when is_binary(Pkt) ->
 	    end
     end;
 send(State, Msg) ->
-    ?LOG_DEBUG("send:~n~s", [stun_codec:pp(Msg)]),
+    ?LOG_DEBUG(#{verbatim => {"send:~n~s", [stun_codec:pp(Msg)]}}),
     Key = State#state.key,
     case Msg of
 	#stun{class = indication} ->
@@ -590,15 +560,6 @@ format_error({error, Reason}) ->
 	    Res
     end.
 
--ifdef(debug).
-addr_to_str({{_, _, _, _, _, _, _, _} = Addr, Port}) ->
-    [$[, inet_parse:ntoa(Addr), $], $:, integer_to_list(Port)];
-addr_to_str({{_, _, _, _} = Addr, Port}) ->
-    [inet_parse:ntoa(Addr), $:, integer_to_list(Port)];
-addr_to_str(Addr) ->
-    inet_parse:ntoa(Addr).
--endif.
-
 cancel_timer(undefined) ->
     ok;
 cancel_timer(TRef) ->
@@ -621,9 +582,11 @@ prepare_response(State, Msg) ->
 	  'SOFTWARE' = State#state.server_name}.
 
 -ifdef(USE_OLD_LOGGER).
-init_logger() ->
-    ok.
+-ifdef(debug).
+maybe_log(Term) -> Term.
 -else.
-init_logger() ->
-    logger:update_process_metadata(#{domain => [stun, turn]}).
+maybe_log(_Term) -> ok.
+-endif.
+-else.
+maybe_log(Term) -> Term.
 -endif.

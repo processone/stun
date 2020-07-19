@@ -32,23 +32,10 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-include("stun_logger.hrl").
+
 -define(TCP_SEND_TIMEOUT, 10000).
 -record(state, {listeners = #{}}).
-
--ifdef(USE_OLD_LOGGER).
--define(LOG_DEBUG(Str), error_logger:info_msg(Str)).
--define(LOG_DEBUG(Str, Args), error_logger:info_msg(Str, Args)).
--define(LOG_INFO(Str), error_logger:info_msg(Str)).
--define(LOG_INFO(Str, Args), error_logger:info_msg(Str, Args)).
--define(LOG_NOTICE(Str), error_logger:info_msg(Str)).
--define(LOG_NOTICE(Str, Args), error_logger:info_msg(Str, Args)).
--define(LOG_WARNING(Str), error_logger:warning_msg(Str)).
--define(LOG_WARNING(Str, Args), error_logger:warning_msg(Str, Args)).
--define(LOG_ERROR(Str), error_logger:error_msg(Str)).
--define(LOG_ERROR(Str, Args), error_logger:error_msg(Str, Args)).
--else. % Use new logging API.
--include_lib("kernel/include/logger.hrl").
--endif.
 
 %%%===================================================================
 %%% API
@@ -66,7 +53,6 @@ del_listener(IP, Port, Transport) ->
 %%% gen_server callbacks
 %%%===================================================================
 init([]) ->
-    ok = init_logger(),
     {ok, #state{}}.
 
 handle_call({add_listener, IP, Port, Transport, Opts}, _From, State) ->
@@ -166,6 +152,7 @@ start_listener(IP, Port, udp, Opts, Owner) ->
 			     {reuseaddr, true}]) of
 	{ok, Socket} ->
 	    Owner ! {self(), ok},
+	    stun_logger:set_metadata(listener, udp),
 	    Opts1 = stun:udp_init(Socket, Opts),
 	    udp_recv(Socket, Opts1);
 	Err ->
@@ -173,15 +160,21 @@ start_listener(IP, Port, udp, Opts, Owner) ->
     end.
 
 accept(ListenSocket, Opts) ->
+    Transport = case proplists:get_bool(tls, Opts) of
+		    true -> tls;
+		    false -> tcp
+		end,
+    ID = stun_logger:make_id(),
+    stun_logger:set_metadata(listener, Transport, ID),
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
             case {inet:peername(Socket),
                   inet:sockname(Socket)} of
                 {{ok, {PeerAddr, PeerPort}}, {ok, {Addr, Port}}} ->
 		    ?LOG_INFO("accepted connection: ~s:~p -> ~s:~p",
-			      [inet_parse:ntoa(PeerAddr), PeerPort,
-			       inet_parse:ntoa(Addr), Port]),
-                    case stun:start({gen_tcp, Socket}, Opts) of
+			      [stun_logger:encode_addr(PeerAddr), PeerPort,
+			       stun_logger:encode_addr(Addr), Port]),
+                    case stun:start({gen_tcp, Socket}, [{session, ID}|Opts]) of
                         {ok, Pid} ->
                             gen_tcp:controlling_process(Socket, Pid);
                         Err ->
@@ -222,11 +215,3 @@ format_listener_error(IP, Port, Transport, Opts, Err) ->
 	       "** Options: ~p~n"
 	       "** Reason: ~p",
 	       [IP, Port, Transport, Opts, Err]).
-
--ifdef(USE_OLD_LOGGER).
-init_logger() ->
-    ok.
--else.
-init_logger() ->
-    logger:update_process_metadata(#{domain => [stun, listener]}).
--endif.

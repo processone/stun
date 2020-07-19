@@ -50,6 +50,7 @@
 -export([rand_uniform/0, rand_uniform/1, rand_uniform/2, unmap_v4_addr/1]).
 
 -include("stun.hrl").
+-include("stun_logger.hrl").
 
 -define(MAX_BUF_SIZE, 64*1024). %% 64kb
 -define(TIMEOUT, 60000). %% 1 minute
@@ -58,29 +59,6 @@
 %% RFC 6156, 9.1: "a TURN relay MUST NOT accept Teredo or 6to4 addresses".
 -define(BLACKLIST, [{{8193, 0, 0, 0, 0, 0, 0, 0}, 32},   % 2001::/32 (Teredo).
 		    {{8194, 0, 0, 0, 0, 0, 0, 0}, 16}]). % 2002::/16 (6to4).
-
--ifdef(USE_OLD_LOGGER).
-%%-define(debug, true).
--ifdef(debug).
--define(LOG_DEBUG(Str), error_logger:info_msg(Str)).
--define(LOG_DEBUG(Str, Args), error_logger:info_msg(Str, Args)).
--define(LOG_INFO(Str), error_logger:info_msg(Str)).
--define(LOG_INFO(Str, Args), error_logger:info_msg(Str, Args)).
--else.
--define(LOG_DEBUG(Str), ok).
--define(LOG_DEBUG(Str, Args), ok).
--define(LOG_INFO(Str), ok).
--define(LOG_INFO(Str, Args), ok).
--endif.
--define(LOG_NOTICE(Str), error_logger:info_msg(Str)).
--define(LOG_NOTICE(Str, Args), error_logger:info_msg(Str, Args)).
--define(LOG_WARNING(Str), error_logger:warning_msg(Str)).
--define(LOG_WARNING(Str, Args), error_logger:warning_msg(Str, Args)).
--define(LOG_ERROR(Str), error_logger:error_msg(Str)).
--define(LOG_ERROR(Str, Args), error_logger:error_msg(Str, Args)).
--else. % Use new logging API.
--include_lib("kernel/include/logger.hrl").
--endif.
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
 
@@ -104,7 +82,8 @@
 	 realm = <<"">>              :: binary(),
 	 auth_fun                    :: function(),
 	 server_name = ?SERVER_NAME  :: binary(),
-	 buf = <<>>                  :: binary()}).
+	 buf = <<>>                  :: binary(),
+	 session                     :: binary()}).
 
 %%====================================================================
 %% API
@@ -131,7 +110,7 @@ udp_recv(Sock, Addr, Port, Data, State) ->
     NewState = prepare_state(State, Sock, {Addr, Port}, gen_udp),
     case stun_codec:decode(Data, datagram) of
  	{ok, Msg} ->
- 	    ?LOG_DEBUG("got:~n~s", [stun_codec:pp(Msg)]),
+ 	    ?LOG_DEBUG(#{verbatim => {"got:~n~s", [stun_codec:pp(Msg)]}}),
  	    process(NewState, Msg);
  	_ ->
 	    NewState
@@ -147,7 +126,7 @@ init([Sock, Opts]) ->
 	    SockMod = get_sockmod(Opts),
 	    State = prepare_state(Opts, Sock, Addr, SockMod),
 	    CertFile = get_certfile(Opts),
-	    case maybe_starttls(Sock, SockMod, CertFile, Addr) of
+	    case maybe_starttls(Sock, SockMod, CertFile) of
 		{ok, NewSock} ->
 		    inet:setopts(Sock, [{active, once}]),
 		    {ok, session_established,
@@ -242,6 +221,7 @@ process(#state{auth = user} = State,
 	      'REALM' = Realm,
 	      'NONCE' = Nonce} = Msg)
   when User /= undefined, Realm /= undefined, Nonce /= undefined ->
+    stun_logger:add_metadata(#{stun_user => User}),
     Resp = prepare_response(State, Msg),
     {HaveNonce, Nonces} = have_nonce(Nonce, State#state.nonces),
     case HaveNonce of
@@ -253,24 +233,17 @@ process(#state{auth = user} = State,
 			  'NONCE' = Nonce},
 	    case (State#state.auth_fun)(User, Realm) of
 		<<"">> ->
-		    ?LOG_NOTICE("failed long-term STUN authentication for "
-				"~s@~s from ~s",
-				[User, Realm, addr_to_str(State#state.peer)]),
+		    ?LOG_NOTICE("Failed long-term STUN authentication"),
 		    send(NewState, R);
 		Pass ->
 		    Key = {User, Realm, Pass},
 		    case stun_codec:check_integrity(Msg, Key) of
 			true ->
-			    ?LOG_NOTICE("accepted long-term STUN "
-					"authentication for ~s@~s from ~s",
-					[User, Realm,
-					 addr_to_str(State#state.peer)]),
+			    ?LOG_NOTICE("Accepted long-term STUN "
+					"authentication"),
 			    process(NewState, Msg, Key);
 			false ->
-			    ?LOG_NOTICE("failed long-term STUN authentication "
-					"for ~s@~s from ~s",
-					[User, Realm,
-					 addr_to_str(State#state.peer)]),
+			    ?LOG_NOTICE("Failed long-term STUN authentication"),
 			    send(NewState, R)
 		    end
 	    end;
@@ -349,7 +322,8 @@ process(State, #stun{class = request,
 		    {relay_ipv4_ip, State#state.relay_ipv4_ip},
 		    {relay_ipv6_ip, State#state.relay_ipv6_ip},
 		    {min_port, State#state.min_port},
-		    {max_port, State#state.max_port} |
+		    {max_port, State#state.max_port},
+		    {session, State#state.session} |
 		    if SockMod /= gen_udp ->
 			    [{owner, self()}];
 		       true ->
@@ -395,7 +369,7 @@ process_data(NextStateName, #state{buf = Buf} = State, Data) ->
     NewBuf = <<Buf/binary, Data/binary>>,
     case stun_codec:decode(NewBuf, stream) of
 	{ok, Msg, Tail} ->
-	    ?LOG_DEBUG("got:~n~s", [stun_codec:pp(Msg)]),
+ 	    ?LOG_DEBUG(#{verbatim => {"got:~n~s", [stun_codec:pp(Msg)]}}),
 	    NewState = process(State, Msg),
 	    process_data(NextStateName, NewState#state{buf = <<>>}, Tail);
 	empty ->
@@ -437,7 +411,7 @@ send(State, Msg) ->
 send(State, Msg, {_JID, Pass}) ->
     send(State, Msg, Pass);
 send(State, Msg, Pass) ->
-    ?LOG_DEBUG("send:~n~s", [stun_codec:pp(Msg)]),
+    ?LOG_DEBUG(#{verbatim => {"send:~n~s", [stun_codec:pp(Msg)]}}),
     case Msg of
 	#stun{class = indication} ->
 	    send(State, stun_codec:encode(Msg, undefined));
@@ -468,7 +442,13 @@ route_on_turn(State, Msg, Pass) ->
     end.
 
 prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
-    ok = init_logger(),
+    ID = case proplists:get_value(session, Opts) of
+	     ID0 when is_binary(ID0) ->
+		 ID0; % Stick to listener's session ID.
+	     undefined ->
+		 stun_logger:make_id()
+	 end,
+    stun_logger:set_metadata(stun, SockMod, ID, Peer),
     case proplists:get_bool(use_turn, Opts) of
 	true ->
 	    lists:foldl(
@@ -576,19 +556,21 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 ({certfile, _}, State) -> State;
 		 ({tls, _}, State) -> State;
 		 (tls, State) -> State;
+		 ({session, _}, State) -> State;
 		 (Opt, State) ->
 		      ?LOG_ERROR("ignoring unknown option ~p", [Opt]),
 		      State
 	      end,
-	      #state{peer = Peer, sock = Sock,
+	      #state{session = ID, peer = Peer, sock = Sock,
 		     sock_mod = SockMod, use_turn = true},
 	      Opts);
 	_ ->
-	    #state{sock = Sock, sock_mod = SockMod, peer = Peer}
+	    #state{session = ID, sock = Sock, sock_mod = SockMod, peer = Peer}
     end;
-prepare_state(State, _Sock, Peer, _SockMod) ->
-    ok = init_logger(),
-    State#state{peer = Peer}.
+prepare_state(State, _Sock, Peer, SockMod) ->
+    ID = stun_logger:make_id(),
+    stun_logger:set_metadata(stun, SockMod, ID, Peer),
+    State#state{session = ID, peer = Peer}.
 
 prepare_addr(IPBin) when is_binary(IPBin) ->
     prepare_addr(binary_to_list(IPBin));
@@ -662,13 +644,6 @@ unmap_v4_addr({{0, 0, 0, 0, 0, 16#FFFF, D7, D8}, Port}) ->
 unmap_v4_addr(AddrPort) ->
     AddrPort.
 
-addr_to_str({{_, _, _, _, _, _, _, _} = Addr, Port}) ->
-    [$[, inet_parse:ntoa(Addr), $], $:, integer_to_list(Port)];
-addr_to_str({{_, _, _, _} = Addr, Port}) ->
-    [inet_parse:ntoa(Addr), $:, integer_to_list(Port)];
-addr_to_str(Addr) ->
-    inet_parse:ntoa(Addr).
-
 is_valid_subnet({{IP1, IP2, IP3, IP4}, Mask}) ->
     (IP1 >= 0) and (IP1 =< 255) and
     (IP2 >= 0) and (IP2 =< 255) and
@@ -704,13 +679,12 @@ get_certfile(Opts) ->
 	    undefined
     end.
 
-maybe_starttls(_Sock, fast_tls, undefined, {IP, Port}) ->
-    ?LOG_ERROR("failed to start TLS connection for ~s:~p: option 'certfile' is "
-	       "not set", [inet_parse:ntoa(IP), Port]),
+maybe_starttls(_Sock, fast_tls, undefined) ->
+    ?LOG_ERROR("Failed to start TLS connection: option 'certfile' is not set"),
     {error, eprotonosupport};
-maybe_starttls(Sock, fast_tls, CertFile, _PeerAddr) ->
+maybe_starttls(Sock, fast_tls, CertFile) ->
     fast_tls:tcp_to_tls(Sock, [{certfile, CertFile}]);
-maybe_starttls(Sock, gen_tcp, _CertFile, _PeerAddr) ->
+maybe_starttls(Sock, gen_tcp, _CertFile) ->
     {ok, Sock}.
 
 prepare_response(State, Msg) ->
@@ -718,14 +692,6 @@ prepare_response(State, Msg) ->
 	  magic = Msg#stun.magic,
 	  trid = Msg#stun.trid,
 	  'SOFTWARE' = State#state.server_name}.
-
--ifdef(USE_OLD_LOGGER).
-init_logger() ->
-    ok.
--else.
-init_logger() ->
-    logger:update_process_metadata(#{domain => [stun, stun]}).
--endif.
 
 -define(THRESHOLD, 16#10000000000000000).
 
