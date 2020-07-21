@@ -241,8 +241,8 @@ process(#state{auth = user} = State,
 		    Key = {User, Realm, Pass},
 		    case stun_codec:check_integrity(Msg, Key) of
 			true ->
-			    ?LOG_NOTICE("Accepting long-term STUN/TURN "
-					"authentication"),
+			    ?LOG_INFO("Accepting long-term STUN/TURN "
+				      "authentication"),
 			    process(NewState, Msg, Key);
 			false ->
 			    ?LOG_NOTICE("Failed long-term STUN/TURN "

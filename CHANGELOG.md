@@ -1,3 +1,7 @@
+# Version 1.0.36
+
+* Log relay (de)allocation rather than authentication at notice level.
+
 # Version 1.0.35
 
 * Updating fast_tls to version 1.1.7.

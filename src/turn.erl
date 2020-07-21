@@ -185,8 +185,8 @@ wait_for_allocate(#stun{class = request,
 		    RelayAddr = {RelayIP, RelayPort},
 		    stun_logger:add_metadata(
 		      #{stun_relay => stun_logger:encode_addr(RelayAddr)}),
-		    ?LOG_INFO("Creating TURN allocation (lifetime: ~B seconds)",
-			      [Lifetime]),
+		    ?LOG_NOTICE("Creating TURN allocation "
+				"(lifetime: ~B seconds)", [Lifetime]),
 		    R = Resp#stun{class = response,
 				  'XOR-RELAYED-ADDRESS' = RelayAddr,
 				  'LIFETIME' = Lifetime,
@@ -437,9 +437,9 @@ terminate(_Reason, _StateName, State) ->
        true ->
 	    ok
     end,
-    ?LOG_INFO("Relayed ~B KiB (in: ~B B / ~B packets, out: ~B B / ~B packets)",
-	      [round((RcvdBytes + SentBytes) / 1024), RcvdBytes, RcvdPkts,
-	       SentBytes, SentPkts]),
+    ?LOG_NOTICE("Relayed ~B KiB (in ~B B / ~B packets, out ~B B / ~B packets)",
+		[round((RcvdBytes + SentBytes) / 1024), RcvdBytes, RcvdPkts,
+		 SentBytes, SentPkts]),
     turn_sm:del_allocation(AddrPort, Username, Realm).
 
 code_change(_OldVsn, StateName, State, _Extra) ->
