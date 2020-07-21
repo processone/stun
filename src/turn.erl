@@ -74,9 +74,9 @@
 	 seq = 1                        :: non_neg_integer(),
 	 life_timer                     :: reference() | undefined,
 	 blacklist                      :: blacklist() | undefined,
-	 received_size = 0              :: non_neg_integer(),
-	 received_pkts = 0              :: non_neg_integer(),
-	 sent_size = 0                  :: non_neg_integer(),
+	 rcvd_bytes = 0                 :: non_neg_integer(),
+	 rcvd_pkts = 0                  :: non_neg_integer(),
+	 sent_bytes = 0                 :: non_neg_integer(),
 	 sent_pkts = 0                  :: non_neg_integer()}).
 
 %%====================================================================
@@ -372,7 +372,7 @@ handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
 	  maps:find(Peer, State#state.peers)} of
 	{{ok, _}, {ok, Channel}} ->
 	    TurnMsg = #turn{channel = Channel, data = Data},
-	    State1 = count_received(State, Data),
+	    State1 = count_rcvd(State, Data),
 	    {next_state, StateName, send(State1, TurnMsg)};
 	{{ok, _}, error} ->
 	    Seq = State#state.seq,
@@ -381,7 +381,7 @@ handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
 			trid = Seq,
 			'XOR-PEER-ADDRESS' = [Peer],
 			'DATA' = Data},
-	    State1 = count_received(State, Data),
+	    State1 = count_rcvd(State, Data),
 	    {next_state, StateName, send(State1#state{seq = Seq+1}, Ind)};
 	{error, _} ->
 	    {next_state, StateName, State}
@@ -422,9 +422,9 @@ terminate(_Reason, _StateName, State) ->
     AddrPort = State#state.addr,
     Username = State#state.username,
     Realm = State#state.realm,
-    ReceivedSize = State#state.received_size,
-    ReceivedPkts = State#state.received_pkts,
-    SentSize = State#state.sent_size,
+    RcvdBytes = State#state.rcvd_bytes,
+    RcvdPkts = State#state.rcvd_pkts,
+    SentBytes = State#state.sent_bytes,
     SentPkts = State#state.sent_pkts,
     case State#state.relay_addr of
 	undefined ->
@@ -438,8 +438,8 @@ terminate(_Reason, _StateName, State) ->
 	    ok
     end,
     ?LOG_INFO("Relayed ~B KiB (in: ~B B / ~B packets, out: ~B B / ~B packets)",
-	      [round((ReceivedSize + SentSize) / 1024), ReceivedSize,
-	       ReceivedPkts, SentSize, SentPkts]),
+	      [round((RcvdBytes + SentBytes) / 1024), RcvdBytes, RcvdPkts,
+	       SentBytes, SentPkts]),
     turn_sm:del_allocation(AddrPort, Username, Realm).
 
 code_change(_OldVsn, StateName, State, _Extra) ->
@@ -628,15 +628,15 @@ prepare_response(State, Msg) ->
 	  trid = Msg#stun.trid,
 	  'SOFTWARE' = State#state.server_name}.
 
-count_sent(#state{sent_size = SendSize,
-		  sent_pkts = SendPkts} = State, Data) ->
-    State#state{sent_size = SendSize + byte_size(Data),
-		sent_pkts = SendPkts + 1}.
+count_sent(#state{sent_bytes = SentSize,
+		  sent_pkts = SentPkts} = State, Data) ->
+    State#state{sent_bytes = SentSize + byte_size(Data),
+		sent_pkts = SentPkts + 1}.
 
-count_received(#state{received_size = RecvSize,
-		      received_pkts = RecvPkts} = State, Data) ->
-    State#state{received_size = RecvSize + byte_size(Data),
-		received_pkts = RecvPkts + 1}.
+count_rcvd(#state{rcvd_bytes = RcvdSize,
+		  rcvd_pkts = RcvdPkts} = State, Data) ->
+    State#state{rcvd_bytes = RcvdSize + byte_size(Data),
+		rcvd_pkts = RcvdPkts + 1}.
 
 -ifdef(USE_OLD_LOGGER).
 -ifdef(debug).
