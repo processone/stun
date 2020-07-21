@@ -1,5 +1,6 @@
 # Version 1.0.35
 
+* Updating fast_tls to version 1.1.7.
 * Add session ID, transport, username, and IP addresses to log output.
 * Log number of TURN-relayed bytes and packets.
 * Log plain STUN (Binding) responses.
