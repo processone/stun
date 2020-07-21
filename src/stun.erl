@@ -120,6 +120,7 @@ udp_recv(Sock, Addr, Port, Data, State) ->
 %% gen_fsm callbacks
 %%====================================================================
 init([Sock, Opts]) ->
+    process_flag(trap_exit, true),
     case inet:peername(Sock) of
 	{ok, Addr} ->
 	    TRef = erlang:start_timer(?TIMEOUT, self(), stop),

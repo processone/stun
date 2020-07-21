@@ -98,6 +98,7 @@ route(Pid, Msg) ->
 %% gen_fsm callbacks
 %%====================================================================
 init([Opts]) ->
+    process_flag(trap_exit, true),
     ID = proplists:get_value(session, Opts),
     Owner = proplists:get_value(owner, Opts),
     Username = proplists:get_value(username, Opts),

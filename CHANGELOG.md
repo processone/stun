@@ -1,6 +1,7 @@
 # Version 1.0.36
 
 * Log relay (de)allocation rather than authentication at notice level.
+* Allow worker processes to perform cleanup tasks on shutdown.
 
 # Version 1.0.35
 

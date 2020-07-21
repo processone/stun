@@ -67,7 +67,7 @@ start_link() ->
 init([]) ->
     {ok, {{simple_one_for_one, 10, 1},
           [{undefined, {stun, start_link, []},
-            temporary, brutal_kill, worker, [stun]}]}}.
+            temporary, 5000, worker, [stun]}]}}.
 
 %%%===================================================================
 %%% Internal functions
