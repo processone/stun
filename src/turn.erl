@@ -74,6 +74,8 @@
 	 seq = 1                        :: non_neg_integer(),
 	 life_timer                     :: reference() | undefined,
 	 blacklist                      :: blacklist() | undefined,
+	 hook_fun                       :: function() | undefined,
+	 session                        :: binary(),
 	 rcvd_bytes = 0                 :: non_neg_integer(),
 	 rcvd_pkts = 0                  :: non_neg_integer(),
 	 sent_bytes = 0                 :: non_neg_integer(),
@@ -105,6 +107,7 @@ init([Opts]) ->
     Realm = proplists:get_value(realm, Opts),
     AddrPort = proplists:get_value(addr, Opts),
     SockMod = proplists:get_value(sock_mod, Opts),
+    HookFun = proplists:get_value(hook_fun, Opts),
     State = #state{sock_mod = SockMod,
 		   sock = proplists:get_value(sock, Opts),
 		   key = proplists:get_value(key, Opts),
@@ -115,8 +118,8 @@ init([Opts]) ->
 		   max_permissions = proplists:get_value(max_permissions, Opts),
 		   blacklist = proplists:get_value(blacklist, Opts),
 		   server_name = proplists:get_value(server_name, Opts),
-		   realm = Realm, addr = AddrPort,
-		   username = Username, owner = Owner},
+		   username = Username, realm = Realm, addr = AddrPort,
+		   session = ID, owner = Owner, hook_fun = HookFun},
     stun_logger:set_metadata(turn, SockMod, ID, AddrPort, Username),
     MaxAllocs = proplists:get_value(max_allocs, Opts),
     if is_pid(Owner) ->
@@ -127,6 +130,7 @@ init([Opts]) ->
     TRef = erlang:start_timer(?DEFAULT_LIFETIME, self(), stop),
     case turn_sm:add_allocation(AddrPort, Username, Realm, MaxAllocs, self()) of
 	ok ->
+	    run_hook(turn_session_start, State),
 	    {ok, wait_for_allocate, State#state{life_timer = TRef}}
 	%%
 	%% turn_sm:add_allocation/5 currently doesn't return errors.
@@ -441,6 +445,7 @@ terminate(_Reason, _StateName, State) ->
     ?LOG_NOTICE("Relayed ~B KiB (in ~B B / ~B packets, out ~B B / ~B packets)",
 		[round((RcvdBytes + SentBytes) / 1024), RcvdBytes, RcvdPkts,
 		 SentBytes, SentPkts]),
+    run_hook(turn_session_stop, State),
     turn_sm:del_allocation(AddrPort, Username, Realm).
 
 code_change(_OldVsn, StateName, State, _Extra) ->
@@ -638,6 +643,36 @@ count_rcvd(#state{rcvd_bytes = RcvdSize,
 		  rcvd_pkts = RcvdPkts} = State, Data) ->
     State#state{rcvd_bytes = RcvdSize + byte_size(Data),
 		rcvd_pkts = RcvdPkts + 1}.
+
+run_hook(HookName, #state{session = ID,
+			  username = User,
+			  realm = Realm,
+			  addr = Client,
+			  sock_mod = SockMod,
+			  hook_fun = HookFun} = State)
+  when is_function(HookFun) ->
+    Info0 = #{id => ID,
+	      user => User,
+	      realm => Realm,
+	      client => Client,
+	      transport => stun_logger:encode_transport(SockMod)},
+    Info = case {HookName, State} of
+	       {turn_session_start, _State} ->
+		   Info0;
+	       {turn_session_stop, #state{sent_bytes = SentBytes,
+					  sent_pkts = SentPkts,
+					  rcvd_bytes = RcvdBytes,
+					  rcvd_pkts = RcvdPkts}} ->
+		   Info0#{sent_bytes => SentBytes,
+			  sent_pkts => SentPkts,
+			  rcvd_bytes => RcvdBytes,
+			  rcvd_pkts => RcvdPkts}
+	   end,
+    try HookFun(HookName, Info)
+    catch _:Err -> ?LOG_ERROR("Hook '~s' failed: ~p", [HookName, Err])
+    end;
+run_hook(_HookName, _State) ->
+    ok.
 
 -ifdef(USE_OLD_LOGGER).
 -ifdef(debug).

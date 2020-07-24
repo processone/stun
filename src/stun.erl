@@ -81,6 +81,7 @@
 	 nonces = treap:empty()      :: treap:treap(),
 	 realm = <<"">>              :: binary(),
 	 auth_fun                    :: function() | undefined,
+	 hook_fun                    :: function() | undefined,
 	 server_name = ?SERVER_NAME  :: binary(),
 	 buf = <<>>                  :: binary(),
 	 session                     :: binary() | undefined}).
@@ -304,6 +305,7 @@ process(State, #stun{class = request,
 		?LOG_INFO("Responding to STUN request"),
 		Resp#stun{class = response, 'XOR-MAPPED-ADDRESS' = AddrPort}
 	end,
+    run_hook(stun_query, State),
     send(State, R, Secret);
 process(#state{use_turn = false} = State,
 	#stun{class = request} = Msg, Secret) ->
@@ -336,6 +338,7 @@ process(State, #stun{class = request,
 		    {relay_ipv6_ip, State#state.relay_ipv6_ip},
 		    {min_port, State#state.min_port},
 		    {max_port, State#state.max_port},
+		    {hook_fun, State#state.hook_fun},
 		    {session, State#state.session} |
 		    if SockMod /= gen_udp ->
 			    [{owner, self()}];
@@ -547,6 +550,11 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 ({auth_fun, Wrong}, State) ->
 		      ?LOG_ERROR("Wrong 'auth_fun' value: ~p", [Wrong]),
 		      State;
+		 ({hook_fun, F}, State) when is_function(F) ->
+		      State#state{hook_fun = F};
+		 ({hook_fun, Wrong}, State) ->
+		      ?LOG_ERROR("Wrong 'hook_fun' value: ~p", [Wrong]),
+		      State;
 		 ({auth_type, anonymous}, State) ->
 		      State#state{auth = anonymous};
 		 ({auth_type, user}, State) ->
@@ -698,6 +706,20 @@ prepare_response(State, Msg) ->
 	  magic = Msg#stun.magic,
 	  trid = Msg#stun.trid,
 	  'SOFTWARE' = State#state.server_name}.
+
+run_hook(HookName, #state{session = ID,
+			  peer = Client,
+			  sock_mod = SockMod,
+			  hook_fun = HookFun})
+  when is_function(HookFun) ->
+    Info = #{id => ID,
+	     client => Client,
+	     transport => stun_logger:encode_transport(SockMod)},
+    try HookFun(HookName, Info)
+    catch _:Err -> ?LOG_ERROR("Hook '~s' failed: ~p", [HookName, Err])
+    end;
+run_hook(_HookName, _State) ->
+    ok.
 
 -define(THRESHOLD, 16#10000000000000000).
 

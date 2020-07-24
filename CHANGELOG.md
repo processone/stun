@@ -2,6 +2,7 @@
 
 * Log relay (de)allocation rather than authentication at notice level.
 * Allow worker processes to perform cleanup tasks on shutdown.
+* Support event callbacks.
 
 # Version 1.0.35
 

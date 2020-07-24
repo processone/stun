@@ -24,7 +24,8 @@
 -module(stun_logger).
 -author('holger@zedat.fu-berlin.de').
 -export([start/0, stop/0, set_metadata/2, set_metadata/3, set_metadata/4,
-	 set_metadata/5, add_metadata/1, make_id/0, encode_addr/1]).
+	 set_metadata/5, add_metadata/1, make_id/0, encode_addr/1,
+	 encode_transport/1]).
 
 -type sub_domain() :: listener | stun | turn.
 -type transport() :: udp | tcp | tls.
@@ -180,6 +181,14 @@ encode_addr({_, _, _, _, _, _, _, _} = Addr) ->
 encode_addr(Addr) ->
     inet:ntoa(Addr).
 
+-spec encode_transport(atom()) -> binary().
+encode_transport(udp) -> <<"UDP">>;
+encode_transport(tcp) -> <<"TCP">>;
+encode_transport(tls) -> <<"TLS">>;
+encode_transport(gen_udp) -> <<"UDP">>;
+encode_transport(gen_tcp) -> <<"TCP">>;
+encode_transport(fast_tls) -> <<"TLS">>.
+
 %% Internal functions.
 
 -spec format_msg(iodata() | atom(), map()) -> {io:format(), [term()]}.
@@ -207,11 +216,3 @@ format_msg(Text, #{stun_transport := Transport}) ->
 -spec format_user(anonymous | iodata()) -> iodata().
 format_user(anonymous) -> <<"anonymous">>;
 format_user(User) -> [<<"user ">>, User].
-
--spec encode_transport(atom()) -> binary().
-encode_transport(udp) -> <<"UDP">>;
-encode_transport(tcp) -> <<"TCP">>;
-encode_transport(tls) -> <<"TLS">>;
-encode_transport(gen_udp) -> <<"UDP">>;
-encode_transport(gen_tcp) -> <<"TCP">>;
-encode_transport(fast_tls) -> <<"TLS">>.
