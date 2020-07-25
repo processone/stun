@@ -716,10 +716,12 @@ run_hook(HookName, #state{session = ID,
     Info = #{id => ID,
 	     client => Client,
 	     transport => stun_logger:encode_transport(SockMod)},
+    ?LOG_DEBUG("Running '~s' hook", [HookName]),
     try HookFun(HookName, Info)
     catch _:Err -> ?LOG_ERROR("Hook '~s' failed: ~p", [HookName, Err])
     end;
-run_hook(_HookName, _State) ->
+run_hook(HookName, _State) ->
+    ?LOG_DEBUG("No callback function specified for '~s' hook", [HookName]),
     ok.
 
 -define(THRESHOLD, 16#10000000000000000).

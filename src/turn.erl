@@ -668,10 +668,12 @@ run_hook(HookName, #state{session = ID,
 			  rcvd_bytes => RcvdBytes,
 			  rcvd_pkts => RcvdPkts}
 	   end,
+    ?LOG_DEBUG("Running '~s' hook", [HookName]),
     try HookFun(HookName, Info)
     catch _:Err -> ?LOG_ERROR("Hook '~s' failed: ~p", [HookName, Err])
     end;
-run_hook(_HookName, _State) ->
+run_hook(HookName, _State) ->
+    ?LOG_DEBUG("No callback function specified for '~s' hook", [HookName]),
     ok.
 
 -ifdef(USE_OLD_LOGGER).
