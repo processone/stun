@@ -30,9 +30,9 @@
 -define(LOG_INFO(Str, Args), stun_logger:log(info, Str, Args)).
 -else.
 -define(LOG_DEBUG(Str), ok).
--define(LOG_DEBUG(Str, Args), ok).
+-define(LOG_DEBUG(Str, Args), begin _ = Args end).
 -define(LOG_INFO(Str), ok).
--define(LOG_INFO(Str, Args), ok).
+-define(LOG_INFO(Str, Args), begin _ = Args end).
 -endif.
 -define(LOG_NOTICE(Str), stun_logger:log(info, Str)).
 -define(LOG_NOTICE(Str, Args), stun_logger:log(info, Str, Args)).
