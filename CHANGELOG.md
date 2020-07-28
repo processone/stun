@@ -1,3 +1,8 @@
+# Version 1.0.37
+
+* Updating p1_utils to version 1.0.20.
+* Updating fast_tls to version 1.1.8.
+
 # Version 1.0.36
 
 * Log relay (de)allocation rather than authentication at notice level.
