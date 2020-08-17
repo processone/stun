@@ -75,7 +75,7 @@
 	 life_timer                     :: reference() | undefined,
 	 blacklist                      :: blacklist() | undefined,
 	 hook_fun                       :: function() | undefined,
-	 session                        :: binary(),
+	 session_id                     :: binary(),
 	 rcvd_bytes = 0                 :: non_neg_integer(),
 	 rcvd_pkts = 0                  :: non_neg_integer(),
 	 sent_bytes = 0                 :: non_neg_integer(),
@@ -101,7 +101,7 @@ route(Pid, Msg) ->
 %%====================================================================
 init([Opts]) ->
     process_flag(trap_exit, true),
-    ID = proplists:get_value(session, Opts),
+    ID = proplists:get_value(session_id, Opts),
     Owner = proplists:get_value(owner, Opts),
     Username = proplists:get_value(username, Opts),
     Realm = proplists:get_value(realm, Opts),
@@ -119,7 +119,7 @@ init([Opts]) ->
 		   blacklist = proplists:get_value(blacklist, Opts),
 		   server_name = proplists:get_value(server_name, Opts),
 		   username = Username, realm = Realm, addr = AddrPort,
-		   session = ID, owner = Owner, hook_fun = HookFun},
+		   session_id = ID, owner = Owner, hook_fun = HookFun},
     stun_logger:set_metadata(turn, SockMod, ID, AddrPort, Username),
     MaxAllocs = proplists:get_value(max_allocs, Opts),
     if is_pid(Owner) ->
@@ -644,7 +644,7 @@ count_rcvd(#state{rcvd_bytes = RcvdSize,
     State#state{rcvd_bytes = RcvdSize + byte_size(Data),
 		rcvd_pkts = RcvdPkts + 1}.
 
-run_hook(HookName, #state{session = ID,
+run_hook(HookName, #state{session_id = ID,
 			  username = User,
 			  realm = Realm,
 			  addr = Client,

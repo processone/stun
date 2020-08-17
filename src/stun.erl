@@ -84,7 +84,7 @@
 	 hook_fun                    :: function() | undefined,
 	 server_name = ?SERVER_NAME  :: binary(),
 	 buf = <<>>                  :: binary(),
-	 session                     :: binary() | undefined}).
+	 session_id                  :: binary() | undefined}).
 
 %%====================================================================
 %% API
@@ -339,7 +339,7 @@ process(State, #stun{class = request,
 		    {min_port, State#state.min_port},
 		    {max_port, State#state.max_port},
 		    {hook_fun, State#state.hook_fun},
-		    {session, State#state.session} |
+		    {session_id, State#state.session_id} |
 		    if SockMod /= gen_udp ->
 			    [{owner, self()}];
 		       true ->
@@ -451,7 +451,7 @@ route_on_turn(State, Msg, Pass) ->
     end.
 
 prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
-    ID = case proplists:get_value(session, Opts) of
+    ID = case proplists:get_value(session_id, Opts) of
 	     ID0 when is_binary(ID0) ->
 		 ID0; % Stick to listener's session ID.
 	     undefined ->
@@ -570,22 +570,22 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 ({certfile, _}, State) -> State;
 		 ({tls, _}, State) -> State;
 		 (tls, State) -> State;
-		 ({session, _}, State) -> State;
+		 ({session_id, _}, State) -> State;
 		 (Opt, State) ->
 		      ?LOG_ERROR("Ignoring unknown option '~p'", [Opt]),
 		      State
 	      end,
-	      #state{session = ID, peer = Peer, sock = Sock,
+	      #state{session_id = ID, peer = Peer, sock = Sock,
 		     sock_mod = SockMod, use_turn = true},
 	      Opts);
 	_ ->
-	    #state{session = ID, sock = Sock, sock_mod = SockMod, peer = Peer,
-		   hook_fun = proplists:get_value(hook_fun, Opts)}
+	    #state{session_id = ID, sock = Sock, sock_mod = SockMod,
+		   peer = Peer, hook_fun = proplists:get_value(hook_fun, Opts)}
     end;
 prepare_state(State, _Sock, Peer, SockMod) ->
     ID = stun_logger:make_id(),
     stun_logger:set_metadata(stun, SockMod, ID, Peer),
-    State#state{session = ID, peer = Peer}.
+    State#state{session_id = ID, peer = Peer}.
 
 prepare_addr(IPBin) when is_binary(IPBin) ->
     prepare_addr(binary_to_list(IPBin));
@@ -708,7 +708,7 @@ prepare_response(State, Msg) ->
 	  trid = Msg#stun.trid,
 	  'SOFTWARE' = State#state.server_name}.
 
-run_hook(HookName, #state{session = ID,
+run_hook(HookName, #state{session_id = ID,
 			  peer = Client,
 			  sock_mod = SockMod,
 			  hook_fun = HookFun})

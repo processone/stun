@@ -54,7 +54,7 @@ set_metadata(SubDomain, Transport) ->
 set_metadata(SubDomain, Transport, ID) ->
     put(?MODULE, #{domain => [stun, SubDomain],
 		   stun_transport => encode_transport(Transport),
-		   stun_session => ID}),
+		   stun_session_id => ID}),
     ok.
 
 -spec set_metadata(sub_domain(), sock_mod(), binary(),
@@ -63,7 +63,7 @@ set_metadata(SubDomain, Transport, ID) ->
 set_metadata(SubDomain, SockMod, ID, Addr, User) ->
     put(?MODULE, #{domain => [stun, SubDomain],
 		   stun_transport => encode_transport(SockMod),
-		   stun_session => ID,
+		   stun_session_id => ID,
 		   stun_client => encode_addr(Addr),
 		   stun_user => User}),
     ok.
@@ -123,7 +123,7 @@ set_metadata(SubDomain, Transport, ID) ->
     logger:set_process_metadata(
       #{domain => [stun, SubDomain],
 	stun_transport => encode_transport(Transport),
-	stun_session => ID}).
+	stun_session_id => ID}).
 
 -spec set_metadata(sub_domain(), sock_mod(), binary(),
 		   {inet:ip_address(), inet:port_number()},
@@ -132,7 +132,7 @@ set_metadata(SubDomain, SockMod, ID, Addr, User) ->
     logger:set_process_metadata(
       #{domain => [stun, SubDomain],
 	stun_transport => encode_transport(SockMod),
-	stun_session => ID,
+	stun_session_id => ID,
 	stun_client => encode_addr(Addr),
 	stun_user => User}).
 
@@ -193,20 +193,20 @@ encode_transport(fast_tls) -> <<"TLS">>.
 
 -spec format_msg(iodata() | atom(), map()) -> {io:format(), [term()]}.
 format_msg(Text, #{stun_transport := Transport,
-		   stun_session := ID,
+		   stun_session_id := ID,
 		   stun_user := User,
 		   stun_client := Client,
 		   stun_relay := Relay}) ->
     {"~s [~s, session ~s, ~s, client ~s, relay ~s]",
      [Text, Transport, ID, format_user(User), Client, Relay]};
 format_msg(Text, #{stun_transport := Transport,
-		   stun_session := ID,
+		   stun_session_id := ID,
 		   stun_user := User,
 		   stun_client := Client}) ->
     {"~s [~s, session ~s, ~s, client ~s]",
      [Text, Transport, ID, format_user(User), Client]};
 format_msg(Text, #{stun_transport := Transport,
-		   stun_session := ID}) ->
+		   stun_session_id := ID}) ->
     {"~s [~s, session ~s]",
      [Text, Transport, ID]};
 format_msg(Text, #{stun_transport := Transport}) ->
