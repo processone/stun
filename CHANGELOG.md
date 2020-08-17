@@ -1,3 +1,7 @@
+# Version 1.0.38
+
+* Log relay allocation refreshes at notice level.
+
 # Version 1.0.37
 
 * Updating p1_utils to version 1.0.20.

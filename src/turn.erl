@@ -255,8 +255,8 @@ active(#stun{class = request,
 		       true ->
 			    lists:min([LifeTime*1000, ?MAX_LIFETIME])
 		    end,
-	    ?LOG_INFO("Refreshing TURN allocation (lifetime: ~B seconds)",
-		      [MSecs div 1000]),
+	    ?LOG_NOTICE("Refreshing TURN allocation (lifetime: ~B seconds)",
+			[MSecs div 1000]),
 	    TRef = erlang:start_timer(MSecs, self(), stop),
 	    R = Resp#stun{class = response,
 			  'LIFETIME' = (MSecs div 1000)},
