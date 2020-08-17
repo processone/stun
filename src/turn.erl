@@ -51,35 +51,36 @@
 -export_type([blacklist/0]).
 
 -record(state,
-	{sock_mod = gen_udp             :: gen_udp | gen_tcp | fast_tls,
-	 sock                           :: inet:socket() | fast_tls:tls_socket() | undefined,
-	 addr = {{0,0,0,0}, 0}          :: addr(),
-	 owner = self()                 :: pid(),
-	 username = <<"">>              :: binary(),
-	 realm = <<"">>                 :: binary(),
-	 key = {<<"">>, <<"">>, <<"">>} :: {binary(), binary(), binary()},
-	 server_name = <<"">>           :: binary(),
-	 peers = #{}                    :: map(),
-	 channels = #{}                 :: map(),
-	 permissions = #{}              :: map(),
-	 max_permissions                :: non_neg_integer() | atom() | undefined,
-	 relay_ipv4_ip = {127,0,0,1}    :: inet:ip4_address(),
-	 relay_ipv6_ip                  :: inet:ip6_address() | undefined,
-	 min_port = 49152               :: non_neg_integer(),
-	 max_port = 65535               :: non_neg_integer(),
-	 relay_addr                     :: addr() | undefined,
-	 relay_sock                     :: inet:socket() | undefined,
-	 last_trid                      :: non_neg_integer() | undefined,
-	 last_pkt = <<>>                :: binary(),
-	 seq = 1                        :: non_neg_integer(),
-	 life_timer                     :: reference() | undefined,
-	 blacklist                      :: blacklist() | undefined,
-	 hook_fun                       :: function() | undefined,
-	 session_id                     :: binary(),
-	 rcvd_bytes = 0                 :: non_neg_integer(),
-	 rcvd_pkts = 0                  :: non_neg_integer(),
-	 sent_bytes = 0                 :: non_neg_integer(),
-	 sent_pkts = 0                  :: non_neg_integer()}).
+	{sock_mod = gen_udp                :: gen_udp | gen_tcp | fast_tls,
+	 sock                              :: inet:socket() | fast_tls:tls_socket() | undefined,
+	 addr = {{0,0,0,0}, 0}             :: addr(),
+	 owner = self()                    :: pid(),
+	 username = <<"">>                 :: binary(),
+	 realm = <<"">>                    :: binary(),
+	 key = {<<"">>, <<"">>, <<"">>}    :: {binary(), binary(), binary()},
+	 server_name = <<"">>              :: binary(),
+	 peers = #{}                       :: map(),
+	 channels = #{}                    :: map(),
+	 permissions = #{}                 :: map(),
+	 max_permissions                   :: non_neg_integer() | atom() | undefined,
+	 relay_ipv4_ip = {127,0,0,1}       :: inet:ip4_address(),
+	 relay_ipv6_ip                     :: inet:ip6_address() | undefined,
+	 min_port = 49152                  :: non_neg_integer(),
+	 max_port = 65535                  :: non_neg_integer(),
+	 relay_addr                        :: addr() | undefined,
+	 relay_sock                        :: inet:socket() | undefined,
+	 last_trid                         :: non_neg_integer() | undefined,
+	 last_pkt = <<>>                   :: binary(),
+	 seq = 1                           :: non_neg_integer(),
+	 life_timer                        :: reference() | undefined,
+	 blacklist                         :: blacklist() | undefined,
+	 hook_fun                          :: function() | undefined,
+	 session_id                        :: binary(),
+	 rcvd_bytes = 0                    :: non_neg_integer(),
+	 rcvd_pkts = 0                     :: non_neg_integer(),
+	 sent_bytes = 0                    :: non_neg_integer(),
+	 sent_pkts = 0                     :: non_neg_integer(),
+	 start_timestamp = get_timestamp() :: integer()}).
 
 %%====================================================================
 %% API
@@ -442,9 +443,10 @@ terminate(_Reason, _StateName, State) ->
        true ->
 	    ok
     end,
-    ?LOG_NOTICE("Relayed ~B KiB (in ~B B / ~B packets, out ~B B / ~B packets)",
+    ?LOG_NOTICE("Relayed ~B KiB (in ~B B / ~B packets, out ~B B / ~B packets), "
+		"duration: ~B sec",
 		[round((RcvdBytes + SentBytes) / 1024), RcvdBytes, RcvdPkts,
-		 SentBytes, SentPkts]),
+		 SentBytes, SentPkts, get_duration(State, second)]),
     run_hook(turn_session_stop, State),
     turn_sm:del_allocation(AddrPort, Username, Realm).
 
@@ -628,6 +630,13 @@ cancel_timer(TRef) ->
             ok
     end.
 
+get_timestamp() ->
+    erlang:monotonic_time().
+
+get_duration(#state{start_timestamp = Start}, Unit) ->
+    Duration = get_timestamp() - Start,
+    erlang:convert_time_unit(Duration, native, Unit).
+
 prepare_response(State, Msg) ->
     #stun{method = Msg#stun.method,
 	  magic = Msg#stun.magic,
@@ -666,7 +675,8 @@ run_hook(HookName, #state{session_id = ID,
 		   Info0#{sent_bytes => SentBytes,
 			  sent_pkts => SentPkts,
 			  rcvd_bytes => RcvdBytes,
-			  rcvd_pkts => RcvdPkts}
+			  rcvd_pkts => RcvdPkts,
+			  duration => get_duration(State, millisecond)}
 	   end,
     ?LOG_DEBUG("Running '~s' hook", [HookName]),
     try HookFun(HookName, Info)

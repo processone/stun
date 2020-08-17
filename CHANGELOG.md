@@ -1,6 +1,7 @@
 # Version 1.0.38
 
 * Log relay allocation refreshes at notice level.
+* Log duration of TURN sessions.
 
 # Version 1.0.37
 
