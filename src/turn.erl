@@ -444,7 +444,7 @@ terminate(_Reason, _StateName, State) ->
 	    ok
     end,
     ?LOG_NOTICE("Relayed ~B KiB (in ~B B / ~B packets, out ~B B / ~B packets), "
-		"duration: ~B sec",
+		"duration: ~B seconds",
 		[round((RcvdBytes + SentBytes) / 1024), RcvdBytes, RcvdPkts,
 		 SentBytes, SentPkts, get_duration(State, second)]),
     run_hook(turn_session_stop, State),
@@ -633,9 +633,11 @@ cancel_timer(TRef) ->
 get_timestamp() ->
     erlang:monotonic_time().
 
-get_duration(#state{start_timestamp = Start}, Unit) ->
-    Duration = get_timestamp() - Start,
-    erlang:convert_time_unit(Duration, native, Unit).
+get_duration(State, Unit) ->
+    erlang:convert_time_unit(get_duration(State), native, Unit).
+
+get_duration(#state{start_timestamp = Start}) ->
+    get_timestamp() - Start.
 
 prepare_response(State, Msg) ->
     #stun{method = Msg#stun.method,
@@ -676,7 +678,7 @@ run_hook(HookName, #state{session_id = ID,
 			  sent_pkts => SentPkts,
 			  rcvd_bytes => RcvdBytes,
 			  rcvd_pkts => RcvdPkts,
-			  duration => get_duration(State, millisecond)}
+			  duration => get_duration(State)}
 	   end,
     ?LOG_DEBUG("Running '~s' hook", [HookName]),
     try HookFun(HookName, Info)
