@@ -2,6 +2,7 @@
 
 * Log relay allocation refreshes at notice level.
 * Log duration of TURN sessions.
+* Hand over more metadata to STUN callback.
 
 # Version 1.0.37
 

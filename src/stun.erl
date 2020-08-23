@@ -305,7 +305,7 @@ process(State, #stun{class = request,
 		?LOG_INFO("Responding to STUN request"),
 		Resp#stun{class = response, 'XOR-MAPPED-ADDRESS' = AddrPort}
 	end,
-    run_hook(stun_query, State),
+    run_hook(stun_query, State, Msg),
     send(State, R, Secret);
 process(#state{use_turn = false} = State,
 	#stun{class = request} = Msg, Secret) ->
@@ -708,19 +708,25 @@ prepare_response(State, Msg) ->
 	  trid = Msg#stun.trid,
 	  'SOFTWARE' = State#state.server_name}.
 
-run_hook(HookName, #state{session_id = ID,
-			  peer = Client,
-			  sock_mod = SockMod,
-			  hook_fun = HookFun})
+run_hook(HookName,
+	 #state{session_id = ID,
+		peer = Client,
+		sock_mod = SockMod,
+		hook_fun = HookFun},
+	 #stun{'USERNAME' = User,
+	       'REALM' = Realm} = Msg)
   when is_function(HookFun) ->
     Info = #{id => ID,
+	     user => User,
+	     realm => Realm,
 	     client => Client,
-	     transport => stun_logger:encode_transport(SockMod)},
+	     transport => stun_logger:encode_transport(SockMod),
+	     version => stun_codec:version(Msg)},
     ?LOG_DEBUG("Running '~s' hook", [HookName]),
     try HookFun(HookName, Info)
     catch _:Err -> ?LOG_ERROR("Hook '~s' failed: ~p", [HookName, Err])
     end;
-run_hook(HookName, _State) ->
+run_hook(HookName, _State, _Msg) ->
     ?LOG_DEBUG("No callback function specified for '~s' hook", [HookName]),
     ok.
 
