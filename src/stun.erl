@@ -158,7 +158,8 @@ handle_info({tcp, _Sock, TLSData}, StateName,
     case fast_tls:recv_data(NewState#state.sock, TLSData) of
 	{ok, Data} ->
 	    process_data(StateName, NewState, Data);
-	_Err ->
+	Err ->
+	    ?LOG_INFO("Connection failure: ~p", [Err]),
 	    {stop, normal, NewState}
     end;
 handle_info({tcp, _Sock, Data}, StateName, State) ->
@@ -172,6 +173,7 @@ handle_info({tcp_error, _Sock, _Reason}, _StateName, State) ->
     {stop, normal, State};
 handle_info({timeout, TRef, stop}, _StateName,
 	    #state{tref = TRef} = State) ->
+    ?LOG_INFO("Connection timed out"),
     {stop, normal, State};
 handle_info({timeout, _TRef, activate}, StateName, State) ->
     activate_socket(State),

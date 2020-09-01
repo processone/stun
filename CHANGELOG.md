@@ -1,5 +1,6 @@
 # Version 1.0.38
 
+* Always log reason for TCP/TLS connection termination.
 * Log relay allocation refreshes at notice level.
 * Log duration of TURN sessions.
 * Log STUN queries at debug (rather than info) level.
