@@ -113,7 +113,8 @@ udp_recv(Sock, Addr, Port, Data, State) ->
  	{ok, Msg} ->
  	    ?LOG_DEBUG(#{verbatim => {"Received:~n~s", [stun_codec:pp(Msg)]}}),
  	    process(NewState, Msg);
- 	_ ->
+ 	Err ->
+	    ?LOG_DEBUG("Cannot parse packet: ~p", [Err]),
 	    NewState
     end.
 
@@ -397,7 +398,8 @@ process_data(NextStateName, #state{buf = Buf} = State, Data) ->
 	more when size(NewBuf) < ?MAX_BUF_SIZE ->
 	    NewState = State#state{buf = NewBuf},
 	    {next_state, NextStateName, NewState};
-	_ ->
+	{error, Reason} ->
+	    ?LOG_DEBUG("Cannot parse packet: ~p", [Reason]),
 	    {stop, normal, State}
     end.
 
