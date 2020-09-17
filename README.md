@@ -43,12 +43,12 @@ You can trigger build with:
 
 The following sequence describe a STUN establishment.
 
-First, start the application and stun listener:
+First, start the application and stun listener at 127.0.0.1:
 
 ```
 1> application:start(stun).
 ok
-2> stun_listener:add_listener(3478, udp, []).
+2> stun_listener:add_listener({127, 0, 0, 1}, 3478, udp, []).
 ok
 ```
 
