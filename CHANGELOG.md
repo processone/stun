@@ -1,3 +1,7 @@
+# Version 1.0.39
+
+* Reduce log level for requests from incompatible clients.
+
 # Version 1.0.38
 
 * Always log reason for TCP/TLS connection termination.

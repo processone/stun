@@ -289,8 +289,8 @@ process(State, _Msg) ->
 
 process(State, #stun{class = request, unsupported = [_|_] = Unsupported} = Msg,
 	Secret) ->
-    ?LOG_NOTICE("Rejecting request with unknown attribute(s): ~p",
-		[Unsupported]),
+    ?LOG_DEBUG("Rejecting request with unknown attribute(s): ~p",
+	       [Unsupported]),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'UNKNOWN-ATTRIBUTES' = Unsupported,
