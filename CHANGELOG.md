@@ -1,5 +1,6 @@
 # Version 1.0.39
 
+* Updating fast_tls to version 1.1.9.
 * Exclude from Travis old OTP releases
 * Reduce log level for requests from incompatible clients.
 
