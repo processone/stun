@@ -1,5 +1,6 @@
 # Version 1.0.39
 
+* Exclude from Travis old OTP releases
 * Reduce log level for requests from incompatible clients.
 
 # Version 1.0.38
