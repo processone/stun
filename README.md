@@ -45,7 +45,7 @@ The following sequence describe a STUN establishment.
 
 First, start the application and stun listener at 127.0.0.1:
 
-```
+```erlang
 1> application:start(stun).
 ok
 2> stun_listener:add_listener({127, 0, 0, 1}, 3478, udp, []).
@@ -54,7 +54,7 @@ ok
 
 Then, you can form and send a BindRequest:
 
-```
+```erlang
 3> rr(stun).
 [state,stun,turn]
 4> random:seed(erlang:timestamp()).
@@ -63,7 +63,7 @@ undefined
 
 You can form a transaction id. Should be always 96 bit:
 
-```
+```erlang
 5> TrID = random:uniform(1 bsl 96).
 41809861624941132369239212033
 ```
@@ -72,7 +72,7 @@ You then create a BindRequest message.
 
 `16#001` is `?STUN_METHOD_BINDING`, defined in `include/stun.hrl`
 
-```
+```erlang
 6> Msg = #stun{method = 16#001, class = request, trid = TrID}.
 #stun{class = request,method = 1,magic = 554869826,
      trid = 41809861624941132369239212033,raw = <<>>,
@@ -89,7 +89,7 @@ You then create a BindRequest message.
 
 You can then establish connection to running server:
 
-```
+```erlang
 7> {ok, Socket} = gen_udp:open(0, [binary, {ip,
 7> {127,0,0,1}},{active,false}]).
 {ok,#Port<0.1020>}
@@ -99,21 +99,21 @@ You can then establish connection to running server:
 
 The following call is for encoding BindRequest:
 
-```
+```erlang
 9> PktOut = stun_codec:encode(Msg).
 <<0,1,0,0,33,18,164,66,135,24,78,148,65,4,128,0,0,0,0,1>>
 ```
 
 The BindRequest can then be send:
 
-```
+```erlang
 10> gen_udp:send(Socket, {127,0,0,1}, 3478, PktOut).
 ok
 ```
 
 The follow code receives the BindResponse:
 
-```
+```erlang
 11> {ok, {_, _, PktIn}} = gen_udp:recv(Socket, 0).
 {ok,{{127,0,0,1},
     3478,
@@ -123,7 +123,7 @@ The follow code receives the BindResponse:
 
 You can then decode the BindResponse:
 
-```
+```erlang
 12> {ok, Response} = stun_codec:decode(PktIn, datagram).
 {ok,#stun{class = response,method = 1,magic = 554869826,
          trid = 41809861624941132369239212033,raw = <<>>,
@@ -142,7 +142,7 @@ You can then decode the BindResponse:
 Finally, checking 'XOR-MAPPED-ADDRESS' attribute, should be equal to locally
 binded address:
 
-```
+```erlang
 13> Addr == Response#stun.'XOR-MAPPED-ADDRESS'.
 true
 ```
