@@ -1,3 +1,8 @@
+# Version 1.0.40
+
+* Updating fast_tls to version 1.1.10.
+* Updating p1_utils to version 1.0.21.
+
 # Version 1.0.39
 
 * Updating fast_tls to version 1.1.9.
