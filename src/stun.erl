@@ -584,7 +584,8 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 	      Opts);
 	_ ->
 	    #state{session_id = ID, sock = Sock, sock_mod = SockMod,
-		   peer = Peer, hook_fun = proplists:get_value(hook_fun, Opts)}
+		   peer = Peer, hook_fun = proplists:get_value(hook_fun, Opts),
+		   auth = anonymous}
     end;
 prepare_state(State, _Sock, Peer, SockMod) ->
     ID = stun_logger:make_id(),
