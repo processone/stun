@@ -56,9 +56,6 @@
 -define(TIMEOUT, 60000). %% 1 minute
 -define(NONCE_LIFETIME, 60*1000*1000). %% 1 minute (in usec)
 -define(SERVER_NAME, <<"P1 STUN library">>).
-%% RFC 6156, 9.1: "a TURN relay MUST NOT accept Teredo or 6to4 addresses".
--define(BLACKLIST, [{{8193, 0, 0, 0, 0, 0, 0, 0}, 32},   % 2001::/32 (Teredo).
-		    {{8194, 0, 0, 0, 0, 0, 0, 0}, 16}]). % 2002::/16 (6to4).
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
 
@@ -76,7 +73,7 @@
 	 max_allocs = 10             :: non_neg_integer() | infinity,
 	 shaper = none               :: stun_shaper:shaper(),
 	 max_permissions = 10        :: non_neg_integer() | infinity,
-	 blacklist = ?BLACKLIST      :: turn:blacklist(),
+	 blacklist = []              :: turn:blacklist(),
 	 auth = user                 :: anonymous | user,
 	 nonces = treap:empty()      :: treap:treap(),
 	 realm = <<"">>              :: binary(),

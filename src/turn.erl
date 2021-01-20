@@ -43,6 +43,10 @@
 -define(DEFAULT_LIFETIME, 600000). %% 10 minutes
 -define(PERMISSION_LIFETIME, 300000). %% 5 minutes
 -define(CHANNEL_LIFETIME, 600000). %% 10 minutes
+-define(INITIAL_BLACKLIST, [
+	%% RFC 6156, 9.1: "a TURN relay MUST NOT accept Teredo or 6to4 addresses".
+	{{8193, 0, 0, 0, 0, 0, 0, 0}, 32},   % 2001::/32 (Teredo).
+	{{8194, 0, 0, 0, 0, 0, 0, 0}, 16}]). % 2002::/16 (6to4).
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
 -type subnet() :: {inet:ip4_address(), 0..32} | {inet:ip6_address(), 0..128}.
@@ -73,7 +77,7 @@
 	 last_pkt = <<>>                   :: binary(),
 	 seq = 1                           :: non_neg_integer(),
 	 life_timer                        :: reference() | undefined,
-	 blacklist                         :: blacklist() | undefined,
+	 blacklist = []                    :: blacklist(),
 	 hook_fun                          :: function() | undefined,
 	 session_id                        :: binary(),
 	 rcvd_bytes = 0                    :: non_neg_integer(),
@@ -109,6 +113,7 @@ init([Opts]) ->
     AddrPort = proplists:get_value(addr, Opts),
     SockMod = proplists:get_value(sock_mod, Opts),
     HookFun = proplists:get_value(hook_fun, Opts),
+    Blacklist = proplists:get_value(blacklist, Opts) ++ ?INITIAL_BLACKLIST,
     State = #state{sock_mod = SockMod,
 		   sock = proplists:get_value(sock, Opts),
 		   key = proplists:get_value(key, Opts),
@@ -117,10 +122,10 @@ init([Opts]) ->
 		   min_port = proplists:get_value(min_port, Opts),
 		   max_port = proplists:get_value(max_port, Opts),
 		   max_permissions = proplists:get_value(max_permissions, Opts),
-		   blacklist = proplists:get_value(blacklist, Opts),
 		   server_name = proplists:get_value(server_name, Opts),
 		   username = Username, realm = Realm, addr = AddrPort,
-		   session_id = ID, owner = Owner, hook_fun = HookFun},
+		   session_id = ID, owner = Owner, hook_fun = HookFun,
+		   blacklist = Blacklist},
     stun_logger:set_metadata(turn, SockMod, ID, AddrPort, Username),
     MaxAllocs = proplists:get_value(max_allocs, Opts),
     if is_pid(Owner) ->
