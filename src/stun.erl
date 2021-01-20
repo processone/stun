@@ -700,7 +700,7 @@ maybe_starttls(_Sock, fast_tls, undefined) ->
     ?LOG_ERROR("Cannot start TLS connection: option 'certfile' is not set"),
     {error, eprotonosupport};
 maybe_starttls(Sock, fast_tls, CertFile) ->
-    fast_tls:tcp_to_tls(Sock, [{certfile, CertFile}]);
+    fast_tls:tcp_to_tls(Sock, [verify_none, {certfile, CertFile}]);
 maybe_starttls(Sock, gen_tcp, _CertFile) ->
     {ok, Sock}.
 
