@@ -1,6 +1,7 @@
 # Version 1.0.41
 
 * Never accept Teredo/6to4 addresses as TURN peers.
+* Never accept 0.0.0.0/:: addresses as TURN peers.
 
 # Version 1.0.40
 

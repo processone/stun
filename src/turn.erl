@@ -44,6 +44,9 @@
 -define(PERMISSION_LIFETIME, 300000). %% 5 minutes
 -define(CHANNEL_LIFETIME, 600000). %% 10 minutes
 -define(INITIAL_BLACKLIST, [
+	%% Could be used to circumvent blocking of loopback addresses:
+	{{0, 0, 0, 0}, 8},
+	{{0, 0, 0, 0, 0, 0, 0, 0}, 128},
 	%% RFC 6156, 9.1: "a TURN relay MUST NOT accept Teredo or 6to4 addresses".
 	{{8193, 0, 0, 0, 0, 0, 0, 0}, 32},   % 2001::/32 (Teredo).
 	{{8194, 0, 0, 0, 0, 0, 0, 0}, 16}]). % 2002::/16 (6to4).
