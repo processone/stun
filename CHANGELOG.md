@@ -1,3 +1,7 @@
+# Version 1.0.42
+
+* Updating fast_tls to version 1.1.11.
+
 # Version 1.0.41
 
 * Never accept Teredo/6to4 addresses as TURN peers.
