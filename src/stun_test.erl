@@ -38,9 +38,9 @@
 -include("stun.hrl").
 
 init_test() ->
-    ?assertEqual(ok, application:start(fast_tls)),
-    ?assertEqual(ok, application:start(p1_utils)),
-    ?assertEqual(ok, application:start(stun)).
+    ?assertMatch({ok, _}, application:ensure_all_started(p1_utils)),
+    ?assertMatch({ok, _}, application:ensure_all_started(fast_tls)),
+    ?assertMatch({ok, _}, application:ensure_all_started(stun)).
 
 mk_cert_test() ->
     ?assertEqual(ok, file:write_file("certfile.pem", get_cert())).
