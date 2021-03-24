@@ -1,0 +1,18 @@
+name: hexpm-release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v2
+
+      - name: Publish to hex.pm
+        run: rebar3 hex publish --repo hexpm --yes || head rebar3.crashdump
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
