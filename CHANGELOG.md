@@ -1,3 +1,9 @@
+# Version 1.0.43
+
+* Updating p1_utils to version 1.0.22.
+* Updating fast_tls to version 1.1.12.
+* stun_test: Start up transitive dependencies
+
 # Version 1.0.42
 
 * Updating fast_tls to version 1.1.11.
