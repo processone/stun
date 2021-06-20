@@ -29,8 +29,6 @@ IsRebar3 = case application:get_key(rebar, vsn) of
 		   lists:keymember(mix, 1, application:loaded_applications())
 	   end,
 
-JobId = case os:getenv("TRAVIS_JOB_ID") of false -> ""; V -> V end,
-
 ModCfg0 = fun(F, Cfg, [Key|Tail], Op, Default) ->
 		  {OldVal,PartCfg} = case lists:keytake(Key, 1, Cfg) of
 					 {value, {_, V1}, V2} -> {V1, V2};
@@ -95,6 +93,22 @@ GlobalDepsFilter = fun(Deps) ->
 
 code:ensure_loaded(rand),
 RandUniform = erlang:function_exported(rand, uniform, 1),
+GithubConfig = case {os:getenv("GITHUB_ACTIONS"), os:getenv("GITHUB_TOKEN")} of
+  {"true", Token} when is_list(Token) ->
+    CONFIG1 = [{coveralls_repo_token, Token},
+               {coveralls_service_job_id, os:getenv("GITHUB_RUN_ID")},
+               {coveralls_commit_sha, os:getenv("GITHUB_SHA")},
+               {coveralls_service_number, os:getenv("GITHUB_RUN_NUMBER")}],
+    case os:getenv("GITHUB_EVENT_NAME") =:= "pull_request"
+        andalso string:tokens(os:getenv("GITHUB_REF"), "/") of
+        [_, "pull", PRNO, _] ->
+            [{coveralls_service_pull_request, PRNO} | CONFIG1];
+        _ ->
+            CONFIG1
+    end;
+  _ ->
+    []
+end,
 
 Rules = [
 	 {[deps], IsRebar3,
@@ -103,17 +117,16 @@ Rules = [
 	  AppendList([rebar3_hex]), []},
 	 {[erl_opts], RandUniform,
 	  AppendList([{d, 'RAND_UNIFORM'}]), []},
-	 {[deps], os:getenv("TRAVIS") == "true",
-	  AppendList([{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", {tag, "v2.0.1"}}}]), []},
-	 {[post_hooks], os:getenv("TRAVIS") == "true",
-	  AppendList([{eunit, "echo '\n%%! -pa .eunit/ deps/coveralls/ebin\nmain(_)->{ok,F}=file:open(\"erlang.json\",[write]),io:fwrite(F,\"~s\",[coveralls:convert_file(\".eunit/cover.coverdata\", \""++JobId++"\", \"travis-ci\",\"\")]).' > getcover.erl"},
-		      {eunit, "escript ./getcover.erl"}]), []},
+	 {[plugins], os:getenv("COVERALLS") == "true",
+	  AppendList([{coveralls, {git,
+	                           "https://github.com/RoadRunnr/coveralls-erl.git",
+	                           {branch, "feature/git-info"}}} ]), []},
 	 {[deps], os:getenv("USE_GLOBAL_DEPS") /= false,
 	  GlobalDepsFilter, []}
 	],
 
 
-Config = FilterConfig(FilterConfig, CONFIG, Rules),
+Config = FilterConfig(FilterConfig, CONFIG, Rules) ++ GithubConfig,
 
 %io:format("Rules:~n~p~n~nCONFIG:~n~p~n~nConfig:~n~p~n", [Rules, CONFIG, Config]),
 
