@@ -87,6 +87,8 @@
 	 rcvd_pkts = 0                     :: non_neg_integer(),
 	 sent_bytes = 0                    :: non_neg_integer(),
 	 sent_pkts = 0                     :: non_neg_integer(),
+	 ice_bin_pid											 :: pid(),
+	 libnice_addr 										 :: inet:ip_address() | undefined,
 	 start_timestamp = get_timestamp() :: integer()}).
 
 %%====================================================================
@@ -126,6 +128,7 @@ init([Opts]) ->
 		   max_port = proplists:get_value(max_port, Opts),
 		   max_permissions = proplists:get_value(max_permissions, Opts),
 		   server_name = proplists:get_value(server_name, Opts),
+			 ice_bin_pid = proplists:get_value(ice_bin_pid, Opts),
 		   username = Username, realm = Realm, addr = AddrPort,
 		   session_id = ID, owner = Owner, hook_fun = HookFun,
 		   blacklist = Blacklist},
@@ -293,7 +296,12 @@ active(#stun{class = indication,
 	     'DATA' = Data}, State) when is_binary(Data) ->
     State1 = case maps:find(Addr, State#state.permissions) of
 		 {ok, _} ->
-		     gen_udp:send(State#state.relay_sock, Addr, Port, Data),
+				case maybe_send_to_ice_bin(State, Data) of
+				false ->
+		     gen_udp:send(State#state.relay_sock, Addr, Port, Data);
+				true ->
+					pass
+				end,
 		     count_sent(State, Data);
 		 error ->
 		     State
@@ -359,13 +367,20 @@ active(#stun{class = request,
 active(#turn{channel = Channel, data = Data}, State) ->
     case maps:find(Channel, State#state.channels) of
 	{ok, {{Addr, Port}, _}} ->
-	    gen_udp:send(State#state.relay_sock,
-			 Addr, Port, Data),
+			case maybe_send_to_ice_bin(State, Data) of
+		false ->
+			  gen_udp:send(State#state.relay_sock, Addr, Port, Data);
+		true ->
+				pass
+			end,
 	    State1 = count_sent(State, Data),
 	    {next_state, active, State1};
 	error ->
 	    {next_state, active, State}
     end;
+active({ice_payload, Payload, Port}, State) ->
+		NewState = send_payload_to_client(Payload, State#state.libnice_addr, Port, State),
+		{next_state, active, NewState};
 active(Event, State) ->
     ?LOG_ERROR("Unexpected event in 'active': ~p", [Event]),
     {next_state, active, State}.
@@ -381,25 +396,8 @@ handle_sync_event(_Event, _From, StateName, State) ->
 
 handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
     inet:setopts(Sock, [{active, once}]),
-    Peer = {Addr, Port},
-    case {maps:find(Addr, State#state.permissions),
-	  maps:find(Peer, State#state.peers)} of
-	{{ok, _}, {ok, Channel}} ->
-	    TurnMsg = #turn{channel = Channel, data = Data},
-	    State1 = count_rcvd(State, Data),
-	    {next_state, StateName, send(State1, TurnMsg)};
-	{{ok, _}, error} ->
-	    Seq = State#state.seq,
-	    Ind = #stun{class = indication,
-			method = ?STUN_METHOD_DATA,
-			trid = Seq,
-			'XOR-PEER-ADDRESS' = [Peer],
-			'DATA' = Data},
-	    State1 = count_rcvd(State, Data),
-	    {next_state, StateName, send(State1#state{seq = Seq+1}, Ind)};
-	{error, _} ->
-	    {next_state, StateName, State}
-    end;
+		NewState = send_payload_to_client(Data, Addr, Port, State),
+		{next_state, StateName, NewState#state{libnice_addr = Addr}};
 handle_info({timeout, _Tref, stop}, _StateName, State) ->
     {stop, normal, State};
 handle_info({timeout, _Tref, {permission_timeout, Addr}},
@@ -428,6 +426,9 @@ handle_info({timeout, _Tref, {channel_timeout, Channel}},
     end;
 handle_info({'DOWN', _Ref, _, _, _}, _StateName, State) ->
     {stop, normal, State};
+handle_info({ice_payload, Payload, Port}, StateName, State) ->
+		NewState = send_payload_to_client(Payload, State#state.libnice_addr, Port, State),
+		{next_state, StateName, NewState};
 handle_info(Info, StateName, State) ->
     ?LOG_ERROR("Unexpected info in '~s': ~p", [StateName, Info]),
     {next_state, StateName, State}.
@@ -511,7 +512,7 @@ send(State, Pkt) when is_binary(Pkt) ->
 	    end
     end;
 send(State, Msg) ->
-    ?LOG_DEBUG(#{verbatim => {"Sending:~n~s", [stun_codec:pp(Msg)]}}),
+    % ?LOG_DEBUG(#{verbatim => {"Sending:~n~s", [stun_codec:pp(Msg)]}}),
     Key = State#state.key,
     case Msg of
 	#stun{class = indication} ->
@@ -526,6 +527,34 @@ send(State, Msg) ->
 	    send(State, stun_codec:encode(Msg, Key)),
 	    State
     end.
+
+send_payload_to_client(Payload, PeerAddr, PeerPort, State) ->
+	 Peer = {PeerAddr, PeerPort},
+		case {maps:find(PeerAddr, State#state.permissions),
+			maps:find(Peer, State#state.peers)} of
+		{{ok, _}, {ok, Channel}} ->
+				TurnMsg = #turn{channel = Channel, data = Payload},
+				State1 = count_rcvd(State, Payload),
+				send(State1, TurnMsg);
+		{{ok, _}, error} ->
+				Seq = State#state.seq,
+				Ind = #stun{class = indication,
+				method = ?STUN_METHOD_DATA,
+				trid = Seq,
+				'XOR-PEER-ADDRESS' = [Peer], 
+				'DATA' = Payload},
+				State1 = count_rcvd(State, Payload),
+				send(State1#state{seq = Seq+1}, Ind);
+		{error, _} ->
+				State
+			end.
+
+maybe_send_to_ice_bin(#state{ice_bin_pid = ICEBinPid}, <<FirstByte, _Tail/binary>> = Payload) 
+	when ice_bin_pid /= undefined, (FirstByte == 128) or (FirstByte == 144) ->
+		ICEBinPid ! {ice_payload, 1, Payload},
+		true;
+maybe_send_to_ice_bin(_State, _Payload) ->
+		false.
 
 time_left(TRef) ->
     erlang:read_timer(TRef) div 1000.

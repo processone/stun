@@ -1,7 +1,7 @@
 %%%----------------------------------------------------------------------
 %%% File    : turn_tmp_sup.erl
 %%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
-%%% Purpose : 
+%%% Purpose :
 %%% Created : 3 May 2014 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
@@ -27,7 +27,6 @@
 
 %% API
 -export([start_link/0]).
-
 %% Supervisor callbacks
 -export([init/1]).
 

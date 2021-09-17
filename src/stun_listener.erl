@@ -74,12 +74,12 @@ handle_call({add_listener, IP, Port, Transport, Opts}, _From, State) ->
 			    format_listener_error(IP, Port, Transport, Opts,
 						  Err),
 			    {reply, Reply, State};
-			ok ->
+			{ok, UsedPort} ->
 			    Listeners = maps:put(
-					  {IP, Port, Transport},
+					  {IP, UsedPort, Transport},
 					  {MRef, Pid, Opts},
 					  State#state.listeners),
-			    {reply, ok, State#state{listeners = Listeners}}
+			    {reply, {ok, UsedPort, Pid}, State#state{listeners = Listeners}}
 		    end
 	    end
     end;
@@ -140,9 +140,12 @@ start_listener(IP, Port, Transport, Opts, Owner)
 			       {send_timeout, ?TCP_SEND_TIMEOUT},
 			       {send_timeout_close, true}]) of
         {ok, ListenSocket} ->
-            Owner ! {self(), ok},
-	    OptsWithTLS1 = stun:tcp_init(ListenSocket, OptsWithTLS),
-            accept(ListenSocket, OptsWithTLS1);
+						{ok, PortNumber} = inet:port(ListenSocket),
+            Owner ! {self(), {ok, PortNumber}},
+						ICEBinPid = receive_ice_bin_pid(),
+						OptsWithTLS1 = [{ice_bin_pid, ICEBinPid}|OptsWithTLS],
+						OptsWithTLS2 = stun:tcp_init(ListenSocket, OptsWithTLS1),
+            accept(ListenSocket, OptsWithTLS2);
         Err ->
             Owner ! {self(), Err}
     end;
@@ -152,10 +155,13 @@ start_listener(IP, Port, udp, Opts, Owner) ->
 			     {active, false},
 			     {reuseaddr, true}]) of
 	{ok, Socket} ->
-	    Owner ! {self(), ok},
+			{ok, PortNumber} = inet:port(Socket),
+	    Owner ! {self(), {ok, PortNumber}},
+			ICEBinPid = receive_ice_bin_pid(),
+			NewOpts = [{ice_bin_pid, ICEBinPid} | Opts],
 	    stun_logger:set_metadata(listener, udp),
-	    Opts1 = stun:udp_init(Socket, Opts),
-	    udp_recv(Socket, Opts1);
+	    NewOpts1 = stun:udp_init(Socket, NewOpts),
+	    udp_recv(Socket, NewOpts1);
 	Err ->
 	    Owner ! {self(), Err}
     end.
@@ -218,3 +224,9 @@ format_listener_error(IP, Port, Transport, Opts, Err) ->
 	       "** Options: ~p~n"
 	       "** Reason: ~p",
 	       [stun_logger:encode_addr(IP), Port, Transport, Opts, Err]).
+
+receive_ice_bin_pid() ->
+	receive 
+		{ice_bin_pid, Pid} ->
+			Pid
+	end.

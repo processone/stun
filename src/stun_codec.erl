@@ -35,12 +35,6 @@
 
 -include("stun.hrl").
 
--ifdef(USE_OLD_CRYPTO_HMAC).
-crypto_hmac(Type, Key, Data) -> crypto:hmac(Type, Key, Data).
--else.
-crypto_hmac(Type, Key, Data) -> crypto:mac(hmac, Type, Key, Data).
--endif.
-
 %%====================================================================
 %% API
 %%====================================================================
@@ -89,8 +83,8 @@ encode(#turn{channel = Channel, data = Data}, _Password) ->
     PaddLen = padd_len(Len),
     <<Channel:16, Len:16, Data/binary, 0:PaddLen>>;
 encode(#stun{class = Class,
-	     method = Method,
-	     magic = Magic,
+             method = Method,
+             magic = Magic,
 	     trid = TrID} = Msg, Key) ->
     ClassCode = case Class of
 		    request -> 0;
@@ -108,14 +102,11 @@ encode(#stun{class = Class,
 			 _ ->
 			     Key
 		     end,
-	    Data = <<0:2, Type:14, (Len+24):16, Magic:32,
-		    TrID:96, Attrs/binary>>,
-	    MessageIntegrity = crypto_hmac(sha, NewKey, Data),
-	    <<Data/binary, ?STUN_ATTR_MESSAGE_INTEGRITY:16,
-	     20:16, MessageIntegrity/binary>>;
+           Data = <<0:2, Type:14, (Len + 24):16, Magic:32, TrID:96, Attrs/binary>>,
+           MessageIntegrity = crypto:mac(hmac, sha, NewKey, Data),
+           <<Data/binary, ?STUN_ATTR_MESSAGE_INTEGRITY:16, 20:16, MessageIntegrity/binary>>;
        true ->
-	    <<0:2, Type:14, Len:16, Magic:32,
-	     TrID:96, Attrs/binary>>
+           <<0:2, Type:14, Len:16, Magic:32, TrID:96, Attrs/binary>>
     end.
 
 add_fingerprint(<<T:16, L:16, Tail/binary>>) ->
@@ -131,7 +122,7 @@ check_integrity(#stun{raw = Raw, 'MESSAGE-INTEGRITY' = MI}, Key)
 		 _ ->
 		     Key
 	     end,
-    crypto_hmac(sha, NewKey, Raw) == MI;
+    crypto:mac(hmac, sha, NewKey, Raw) == MI;
 check_integrity(_Msg, _Key) ->
     false.
 
@@ -165,16 +156,23 @@ error(Int) -> {Int, <<"Undefined Error">>}.
 %%====================================================================
 decode(Type, Magic, TrID, Body) ->
     Method = ?STUN_METHOD(Type),
-    Class = case ?STUN_CLASS(Type) of
-		0 -> request;
-		1 -> indication;
-		2 -> response;
-		3 -> error
-	    end,
-    dec_attrs(Body, 20, #stun{class = Class,
-			      method = Method,
-			      magic = Magic,
-			      trid = TrID}).
+    Class =
+        case ?STUN_CLASS(Type) of
+            0 ->
+                request;
+            1 ->
+                indication;
+            2 ->
+                response;
+            3 ->
+                error
+        end,
+    dec_attrs(Body,
+              20,
+              #stun{class = Class,
+                    method = Method,
+                    magic = Magic,
+                    trid = TrID}).
 
 dec_attrs(<<Type:16, Len:16, Rest/binary>>, Bytes, Msg) ->
     PaddLen = padd_len(Len),
@@ -190,15 +188,16 @@ dec_attrs(<<>>, _Bytes, Msg) ->
     {Msg, 0}.
 
 enc_attrs(Msg) ->
-    iolist_to_binary(
-      [enc_attr(?STUN_ATTR_SOFTWARE, Msg#stun.'SOFTWARE'),
-       enc_addr(?STUN_ATTR_MAPPED_ADDRESS, Msg#stun.'MAPPED-ADDRESS'),
-       enc_xor_addr(?STUN_ATTR_XOR_MAPPED_ADDRESS,
-		    Msg#stun.magic, Msg#stun.trid,
-		    Msg#stun.'XOR-MAPPED-ADDRESS'),
-       enc_xor_addr(?STUN_ATTR_XOR_RELAYED_ADDRESS,
-		    Msg#stun.magic, Msg#stun.trid,
-		    Msg#stun.'XOR-RELAYED-ADDRESS'),
+    iolist_to_binary([enc_attr(?STUN_ATTR_SOFTWARE, Msg#stun.'SOFTWARE'),
+                      enc_addr(?STUN_ATTR_MAPPED_ADDRESS, Msg#stun.'MAPPED-ADDRESS'),
+                      enc_xor_addr(?STUN_ATTR_XOR_MAPPED_ADDRESS,
+                                   Msg#stun.magic,
+                                   Msg#stun.trid,
+                                   Msg#stun.'XOR-MAPPED-ADDRESS'),
+                      enc_xor_addr(?STUN_ATTR_XOR_RELAYED_ADDRESS,
+                                   Msg#stun.magic,
+                                   Msg#stun.trid,
+                                   Msg#stun.'XOR-RELAYED-ADDRESS'),
        enc_xor_peer_addr(Msg#stun.magic, Msg#stun.trid,
 			 Msg#stun.'XOR-PEER-ADDRESS'),
        enc_req_family(Msg#stun.'REQUESTED-ADDRESS-FAMILY'),
@@ -316,8 +315,7 @@ enc_addr(_Type, undefined) ->
 enc_addr(Type, {{A1, A2, A3, A4}, Port}) ->
     enc_attr(Type, <<0, 1, Port:16, A1, A2, A3, A4>>);
 enc_addr(Type, {{A1, A2, A3, A4, A5, A6, A7, A8}, Port}) ->
-    enc_attr(Type, <<0, 2, Port:16, A1:16, A2:16, A3:16,
-		    A4:16, A5:16, A6:16, A7:16, A8:16>>).
+    enc_attr(Type, <<0, 2, Port:16, A1:16, A2:16, A3:16, A4:16, A5:16, A6:16, A7:16, A8:16>>).
 
 enc_xor_addr(_Type, _Magic, _TrID, undefined) ->
     <<>>;
@@ -326,8 +324,7 @@ enc_xor_addr(Type, Magic, _TrID, {{A1, A2, A3, A4}, Port}) ->
     <<Addr:32>> = <<A1, A2, A3, A4>>,
     XAddr = Addr bxor Magic,
     enc_attr(Type, <<0, 1, XPort:16, XAddr:32>>);
-enc_xor_addr(Type, Magic, TrID,
-	     {{A1, A2, A3, A4, A5, A6, A7, A8}, Port}) ->
+enc_xor_addr(Type, Magic, TrID, {{A1, A2, A3, A4, A5, A6, A7, A8}, Port}) ->
     XPort = Port bxor (Magic bsr 16),
     <<Addr:128>> = <<A1:16, A2:16, A3:16, A4:16,
 		    A5:16, A6:16, A7:16, A8:16>>,
@@ -350,8 +347,7 @@ enc_error_code({Code, Reason}) ->
 enc_unknown_attrs([]) ->
     <<>>;
 enc_unknown_attrs(Attrs) ->
-    enc_attr(?STUN_ATTR_UNKNOWN_ATTRIBUTES,
-	     iolist_to_binary([<<Attr:16>> || Attr <- Attrs])).
+    enc_attr(?STUN_ATTR_UNKNOWN_ATTRIBUTES, iolist_to_binary([<<Attr:16>> || Attr <- Attrs])).
 
 enc_uint32(_Type, undefined) ->
     <<>>;
