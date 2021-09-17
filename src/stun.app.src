@@ -21,14 +21,14 @@
 %%%
 %%%----------------------------------------------------------------------
 
-{application, stun,
- [{description,  "STUN and TURN library for Erlang / Elixir"},
-  {vsn,          "1.0.44"},
-  {modules,      []},
-  {registered,   []},
+{application,
+ stun,
+ [{description, "STUN and TURN library for Erlang / Elixir"},
+  {vsn, "1.0.44"},
+  {modules, []},
+  {registered, []},
   {applications, [kernel, stdlib, fast_tls, p1_utils]},
-  {mod,          {stun_app,[]}},
-
+  {mod, {stun_app, []}},
   %% hex.pm packaging:
   {licenses, ["Apache 2.0"]},
   {links, [{"Github", "https://github.com/processone/stun"}]}]}.

@@ -26,15 +26,10 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0,
-	 start/0,
-	 find_allocation/1,
-	 add_allocation/5,
-	 del_allocation/3]).
-
+-export([start_link/0, start/0, find_allocation/1, add_allocation/5, del_allocation/3]).
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-	 terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 -include("stun.hrl").
 
@@ -51,10 +46,10 @@ start_link() ->
 
 find_allocation(AddrPort) ->
     case ets:lookup(turn_allocs, AddrPort) of
-	[{_, Pid}] ->
-	    {ok, Pid};
-	_ ->
-	    {error, notfound}
+        [{_, Pid}] ->
+            {ok, Pid};
+        _ ->
+            {error, notfound}
     end.
 
 add_allocation(AddrPort, _User, _Realm, _MaxAllocs, Pid) ->

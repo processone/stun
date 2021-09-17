@@ -1,7 +1,7 @@
 %%%----------------------------------------------------------------------
 %%% File    : stun_listener.erl
 %%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
-%%% Purpose : 
+%%% Purpose :
 %%% Created : 9 Jan 2011 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
@@ -27,14 +27,14 @@
 
 %% API
 -export([start_link/0, add_listener/4, del_listener/3, start_listener/5]).
-
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 -include("stun_logger.hrl").
 
 -define(TCP_SEND_TIMEOUT, 10000).
+
 -record(state, {listeners = #{}}).
 
 %%%===================================================================
@@ -57,42 +57,40 @@ init([]) ->
 
 handle_call({add_listener, IP, Port, Transport, Opts}, _From, State) ->
     case maps:find({IP, Port, Transport}, State#state.listeners) of
-	{ok, _} ->
-	    Err = {error, already_started},
-	    {reply, Err, State};
-	error ->
-	    {Pid, MRef} = spawn_monitor(?MODULE, start_listener,
-					[IP, Port, Transport, Opts, self()]),
-	    receive
-		{'DOWN', MRef, _Type, _Object, Info} ->
-		    Res = {error, Info},
-		    format_listener_error(IP, Port, Transport, Opts, Res),
-		    {reply, Res, State};
-		{Pid, Reply} ->
-		    case Reply of
-			{error, _} = Err ->
-			    format_listener_error(IP, Port, Transport, Opts,
-						  Err),
-			    {reply, Reply, State};
-			{ok, UsedPort} ->
-			    Listeners = maps:put(
-					  {IP, UsedPort, Transport},
-					  {MRef, Pid, Opts},
-					  State#state.listeners),
-			    {reply, {ok, UsedPort, Pid}, State#state{listeners = Listeners}}
-		    end
-	    end
+        {ok, _} ->
+            Err = {error, already_started},
+            {reply, Err, State};
+        error ->
+            {Pid, MRef} =
+                spawn_monitor(?MODULE, start_listener, [IP, Port, Transport, Opts, self()]),
+            receive
+                {'DOWN', MRef, _Type, _Object, Info} ->
+                    Res = {error, Info},
+                    format_listener_error(IP, Port, Transport, Opts, Res),
+                    {reply, Res, State};
+                {Pid, Reply} ->
+                    case Reply of
+                        {error, _} = Err ->
+                            format_listener_error(IP, Port, Transport, Opts, Err),
+                            {reply, Reply, State};
+                        {ok, UsedPort} ->
+                            Listeners =
+                                maps:put({IP, UsedPort, Transport},
+                                         {MRef, Pid, Opts},
+                                         State#state.listeners),
+                            {reply, {ok, UsedPort, Pid}, State#state{listeners = Listeners}}
+                    end
+            end
     end;
 handle_call({del_listener, IP, Port, Transport}, _From, State) ->
     case maps:find({IP, Port, Transport}, State#state.listeners) of
-	{ok, {MRef, Pid, _Opts}} ->
-	    catch erlang:demonitor(MRef, [flush]),
-	    catch exit(Pid, kill),
-	    Listeners = maps:remove({IP, Port, Transport},
-				    State#state.listeners),
-	    {reply, ok, State#state{listeners = Listeners}};
-	error ->
-	    {reply, {error, notfound}, State}
+        {ok, {MRef, Pid, _Opts}} ->
+            catch erlang:demonitor(MRef, [flush]),
+            catch exit(Pid, kill),
+            Listeners = maps:remove({IP, Port, Transport}, State#state.listeners),
+            {reply, ok, State#state{listeners = Listeners}};
+        error ->
+            {reply, {error, notfound}, State}
     end;
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -102,15 +100,15 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({'DOWN', MRef, _Type, _Pid, Info}, State) ->
-    Listeners = maps:filter(
-		  fun({IP, Port, Transport}, {Ref, _, _}) when Ref == MRef ->
-			  ?LOG_ERROR("Listener on ~s (~s) failed: ~p",
-				     [stun_logger:encode_addr({IP, Port}),
-				      Transport, Info]),
-			  false;
-		     (_, _) ->
-			  true
-		  end, State#state.listeners),
+    Listeners =
+        maps:filter(fun ({IP, Port, Transport}, {Ref, _, _}) when Ref == MRef ->
+                            ?LOG_ERROR("Listener on ~s (~s) failed: ~p",
+                                       [stun_logger:encode_addr({IP, Port}), Transport, Info]),
+                            false;
+                        (_, _) ->
+                            true
+                    end,
+                    State#state.listeners),
     {noreply, State#state{listeners = Listeners}};
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -125,64 +123,67 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 start_listener(IP, Port, Transport, Opts, Owner)
-  when Transport == tcp; Transport == tls ->
-    OptsWithTLS = case Transport of
-		      tls -> [tls|Opts];
-		      tcp -> Opts
-		  end,
-    case gen_tcp:listen(Port, [binary,
-                               {ip, IP},
-                               {packet, 0},
-                               {active, false},
-                               {reuseaddr, true},
-                               {nodelay, true},
-                               {keepalive, true},
-			       {send_timeout, ?TCP_SEND_TIMEOUT},
-			       {send_timeout_close, true}]) of
+    when Transport == tcp; Transport == tls ->
+    OptsWithTLS =
+        case Transport of
+            tls ->
+                [tls | Opts];
+            tcp ->
+                Opts
+        end,
+    case gen_tcp:listen(Port,
+                        [binary,
+                         {ip, IP},
+                         {packet, 0},
+                         {active, false},
+                         {reuseaddr, true},
+                         {nodelay, true},
+                         {keepalive, true},
+                         {send_timeout, ?TCP_SEND_TIMEOUT},
+                         {send_timeout_close, true}])
+    of
         {ok, ListenSocket} ->
-						{ok, PortNumber} = inet:port(ListenSocket),
+            {ok, PortNumber} = inet:port(ListenSocket),
             Owner ! {self(), {ok, PortNumber}},
-						ICEBinPid = receive_ice_bin_pid(),
-						OptsWithTLS1 = [{ice_bin_pid, ICEBinPid}|OptsWithTLS],
-						OptsWithTLS2 = stun:tcp_init(ListenSocket, OptsWithTLS1),
+            ICEBinPid = receive_ice_bin_pid(),
+            OptsWithTLS1 = [{ice_bin_pid, ICEBinPid} | OptsWithTLS],
+            OptsWithTLS2 = stun:tcp_init(ListenSocket, OptsWithTLS1),
             accept(ListenSocket, OptsWithTLS2);
         Err ->
             Owner ! {self(), Err}
     end;
 start_listener(IP, Port, udp, Opts, Owner) ->
-    case gen_udp:open(Port, [binary,
-			     {ip, IP},
-			     {active, false},
-			     {reuseaddr, true}]) of
-	{ok, Socket} ->
-			{ok, PortNumber} = inet:port(Socket),
-	    Owner ! {self(), {ok, PortNumber}},
-			ICEBinPid = receive_ice_bin_pid(),
-			NewOpts = [{ice_bin_pid, ICEBinPid} | Opts],
-	    stun_logger:set_metadata(listener, udp),
-	    NewOpts1 = stun:udp_init(Socket, NewOpts),
-	    udp_recv(Socket, NewOpts1);
-	Err ->
-	    Owner ! {self(), Err}
+    case gen_udp:open(Port, [binary, {ip, IP}, {active, false}, {reuseaddr, true}]) of
+        {ok, Socket} ->
+            {ok, PortNumber} = inet:port(Socket),
+            Owner ! {self(), {ok, PortNumber}},
+            ICEBinPid = receive_ice_bin_pid(),
+            NewOpts = [{ice_bin_pid, ICEBinPid} | Opts],
+            stun_logger:set_metadata(listener, udp),
+            NewOpts1 = stun:udp_init(Socket, NewOpts),
+            udp_recv(Socket, NewOpts1);
+        Err ->
+            Owner ! {self(), Err}
     end.
 
 accept(ListenSocket, Opts) ->
-    Transport = case proplists:get_bool(tls, Opts) of
-		    true -> tls;
-		    false -> tcp
-		end,
+    Transport =
+        case proplists:get_bool(tls, Opts) of
+            true ->
+                tls;
+            false ->
+                tcp
+        end,
     ID = stun_logger:make_id(),
     stun_logger:set_metadata(listener, Transport, ID),
     case gen_tcp:accept(ListenSocket) of
         {ok, Socket} ->
-            case {inet:peername(Socket),
-                  inet:sockname(Socket)} of
+            case {inet:peername(Socket), inet:sockname(Socket)} of
                 {{ok, {PeerAddr, PeerPort}}, {ok, {Addr, Port}}} ->
-		    ?LOG_INFO("Accepting connection: ~s -> ~s",
-			      [stun_logger:encode_addr({PeerAddr, PeerPort}),
-			       stun_logger:encode_addr({Addr, Port})]),
-		    case stun:start({gen_tcp, Socket},
-				    [{session_id, ID}|Opts]) of
+                    ?LOG_INFO("Accepting connection: ~s -> ~s",
+                              [stun_logger:encode_addr({PeerAddr, PeerPort}),
+                               stun_logger:encode_addr({Addr, Port})]),
+                    case stun:start({gen_tcp, Socket}, [{session_id, ID} | Opts]) of
                         {ok, Pid} ->
                             gen_tcp:controlling_process(Socket, Pid);
                         Err ->
@@ -199,34 +200,33 @@ accept(ListenSocket, Opts) ->
 
 udp_recv(Socket, Opts) ->
     case gen_udp:recv(Socket, 0) of
-	{ok, {Addr, Port, Packet}} ->
-	    case catch stun:udp_recv(Socket, Addr, Port, Packet, Opts) of
-		{'EXIT', Reason} ->
-		    ?LOG_ERROR("Cannot process UDP packet:~n"
-			       "** Source: ~s~n"
-			       "** Reason: ~p~n** Packet: ~p",
-			       [stun_logger:encode_addr({Addr, Port}), Reason,
-				Packet]),
-		    udp_recv(Socket, Opts);
-		NewOpts ->
-		    udp_recv(Socket, NewOpts)
-	    end;
-	{error, Reason} ->
-	    ?LOG_ERROR("Unexpected UDP error: ~s", [inet:format_error(Reason)]),
-	    erlang:error(Reason)
+        {ok, {Addr, Port, Packet}} ->
+            case catch stun:udp_recv(Socket, Addr, Port, Packet, Opts) of
+                {'EXIT', Reason} ->
+                    ?LOG_ERROR("Cannot process UDP packet:~n"
+                               "** Source: ~s~n"
+                               "** Reason: ~p~n** Packet: ~p",
+                               [stun_logger:encode_addr({Addr, Port}), Reason, Packet]),
+                    udp_recv(Socket, Opts);
+                NewOpts ->
+                    udp_recv(Socket, NewOpts)
+            end;
+        {error, Reason} ->
+            ?LOG_ERROR("Unexpected UDP error: ~s", [inet:format_error(Reason)]),
+            erlang:error(Reason)
     end.
 
 format_listener_error(IP, Port, Transport, Opts, Err) ->
     ?LOG_ERROR("Cannot start listener:~n"
-	       "** IP: ~s~n"
-	       "** Port: ~B~n"
-	       "** Transport: ~s~n"
-	       "** Options: ~p~n"
-	       "** Reason: ~p",
-	       [stun_logger:encode_addr(IP), Port, Transport, Opts, Err]).
+               "** IP: ~s~n"
+               "** Port: ~B~n"
+               "** Transport: ~s~n"
+               "** Options: ~p~n"
+               "** Reason: ~p",
+               [stun_logger:encode_addr(IP), Port, Transport, Opts, Err]).
 
 receive_ice_bin_pid() ->
-	receive 
-		{ice_bin_pid, Pid} ->
-			Pid
-	end.
+    receive
+        {ice_bin_pid, Pid} ->
+            Pid
+    end.

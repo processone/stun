@@ -1,7 +1,7 @@
 %%%----------------------------------------------------------------------
 %%% File    : stun_tmp_sup.erl
 %%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
-%%% Purpose : 
+%%% Purpose :
 %%% Created : 3 May 2014 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
@@ -27,7 +27,6 @@
 
 %% API
 -export([start_link/0]).
-
 %% Supervisor callbacks
 -export([init/1]).
 
@@ -65,9 +64,9 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, {{simple_one_for_one, 10, 1},
-          [{undefined, {stun, start_link, []},
-            temporary, 5000, worker, [stun]}]}}.
+    {ok,
+     {{simple_one_for_one, 10, 1},
+      [{undefined, {stun, start_link, []}, temporary, 5000, worker, [stun]}]}}.
 
 %%%===================================================================
 %%% Internal functions

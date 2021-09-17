@@ -24,22 +24,30 @@
 -ifdef(USE_OLD_LOGGER).
 %%-define(debug, true).
 -ifdef(debug).
+
 -define(LOG_DEBUG(Str), stun_logger:log(info, Str)).
 -define(LOG_DEBUG(Str, Args), stun_logger:log(info, Str, Args)).
 -define(LOG_INFO(Str), stun_logger:log(info, Str)).
 -define(LOG_INFO(Str, Args), stun_logger:log(info, Str, Args)).
+
 -else.
+
 -define(LOG_DEBUG(Str), ok).
 -define(LOG_DEBUG(Str, Args), begin _ = Args end).
 -define(LOG_INFO(Str), ok).
 -define(LOG_INFO(Str, Args), begin _ = Args end).
+
 -endif.
+
 -define(LOG_NOTICE(Str), stun_logger:log(info, Str)).
 -define(LOG_NOTICE(Str, Args), stun_logger:log(info, Str, Args)).
 -define(LOG_WARNING(Str), stun_logger:log(warning, Str)).
 -define(LOG_WARNING(Str, Args), stun_logger:log(warning, Str, Args)).
 -define(LOG_ERROR(Str), stun_logger:log(error, Str)).
 -define(LOG_ERROR(Str, Args), stun_logger:log(error, Str, Args)).
+
 -else. % Use new logging API.
+
 -include_lib("kernel/include/logger.hrl").
+
 -endif.

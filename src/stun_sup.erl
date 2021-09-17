@@ -42,14 +42,28 @@ start_link() ->
 %%% Supervisor callbacks
 %%%===================================================================
 init([]) ->
-    StunTmpSup = {stun_tmp_sup, {stun_tmp_sup, start_link, []},
-		  permanent, infinity, supervisor, [stun_tmp_sup]},
-    TurnTmpSup = {turn_tmp_sup, {turn_tmp_sup, start_link, []},
-		  permanent, infinity, supervisor, [turn_tmp_sup]},
-    TurnSM = {turn_sm, {turn_sm, start_link, []},
-	      permanent, 2000, worker, [turn_sm]},
-    StunListen = {stun_listener, {stun_listener, start_link, []},
-		  permanent, 2000, worker, [stun_listener]},
+    StunTmpSup =
+        {stun_tmp_sup,
+         {stun_tmp_sup, start_link, []},
+         permanent,
+         infinity,
+         supervisor,
+         [stun_tmp_sup]},
+    TurnTmpSup =
+        {turn_tmp_sup,
+         {turn_tmp_sup, start_link, []},
+         permanent,
+         infinity,
+         supervisor,
+         [turn_tmp_sup]},
+    TurnSM = {turn_sm, {turn_sm, start_link, []}, permanent, 2000, worker, [turn_sm]},
+    StunListen =
+        {stun_listener,
+         {stun_listener, start_link, []},
+         permanent,
+         2000,
+         worker,
+         [stun_listener]},
     {ok, {{one_for_one, 10, 1}, [TurnSM, StunTmpSup, TurnTmpSup, StunListen]}}.
 
 %%%===================================================================

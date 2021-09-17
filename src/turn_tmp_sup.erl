@@ -64,9 +64,9 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, {{simple_one_for_one, 10, 1},
-          [{undefined, {turn, start_link, []},
-            temporary, 5000, worker, [turn]}]}}.
+    {ok,
+     {{simple_one_for_one, 10, 1},
+      [{undefined, {turn, start_link, []}, temporary, 5000, worker, [turn]}]}}.
 
 %%%===================================================================
 %%% Internal functions

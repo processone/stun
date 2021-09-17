@@ -27,9 +27,8 @@
 
 -export([new/1, update/2]).
 
--record(maxrate, {maxrate  = 0   :: integer(),
-                  lastrate = 0.0 :: float(),
-                  lasttime = 0   :: integer()}).
+-record(maxrate,
+        {maxrate = 0 :: integer(), lastrate = 0.0 :: float(), lasttime = 0 :: integer()}).
 
 -type shaper() :: none | #maxrate{}.
 
@@ -39,28 +38,29 @@
 %%% API
 %%%===================================================================
 -spec new(none | integer()) -> shaper().
-
-new(none) -> none;
+new(none) ->
+    none;
 new(MaxRate) when is_integer(MaxRate) ->
-    #maxrate{maxrate = MaxRate, lastrate = 0.0,
-	     lasttime = p1_time_compat:monotonic_time(micro_seconds)}.
+    #maxrate{maxrate = MaxRate,
+             lastrate = 0.0,
+             lasttime = p1_time_compat:monotonic_time(micro_seconds)}.
 
 -spec update(shaper(), integer()) -> {shaper(), integer()}.
-
-update(none, _Size) -> {none, 0};
+update(none, _Size) ->
+    {none, 0};
 update(#maxrate{} = State, Size) ->
-    MinInterv = 1000 * Size /
-		  (2 * State#maxrate.maxrate - State#maxrate.lastrate),
-    Interv = (p1_time_compat:monotonic_time(micro_seconds) - State#maxrate.lasttime) /
-	       1000,
-    Pause = if MinInterv > Interv ->
-		   1 + trunc(MinInterv - Interv);
-	       true -> 0
-	    end,
+    MinInterv = 1000 * Size / (2 * State#maxrate.maxrate - State#maxrate.lastrate),
+    Interv = (p1_time_compat:monotonic_time(micro_seconds) - State#maxrate.lasttime) / 1000,
+    Pause =
+        if MinInterv > Interv ->
+               1 + trunc(MinInterv - Interv);
+           true ->
+               0
+        end,
     NextNow = p1_time_compat:monotonic_time(micro_seconds) + Pause * 1000,
     {State#maxrate{lastrate =
-		       (State#maxrate.lastrate +
-			  1000000 * Size / (NextNow - State#maxrate.lasttime))
-			 / 2,
-		   lasttime = NextNow},
+                       (State#maxrate.lastrate
+                        + 1000000 * Size / (NextNow - State#maxrate.lasttime))
+                       / 2,
+                   lasttime = NextNow},
      Pause}.
