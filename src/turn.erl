@@ -74,7 +74,7 @@
          rcvd_bytes = 0 :: non_neg_integer(), rcvd_pkts = 0 :: non_neg_integer(),
          sent_bytes = 0 :: non_neg_integer(), sent_pkts = 0 :: non_neg_integer(),
          ice_bin_pid :: pid(), libnice_addr :: inet:ip_address() | undefined,
-         start_timestamp = get_timestamp() :: integer()}).
+         start_timestamp = get_timestamp() :: integer(), in_use :: boolean()}).
 
 %%====================================================================
 %% API
@@ -121,7 +121,8 @@ init([Opts]) ->
                session_id = ID,
                owner = Owner,
                hook_fun = HookFun,
-               blacklist = Blacklist},
+               blacklist = Blacklist,
+               in_use = false},
     stun_logger:set_metadata(turn, SockMod, ID, AddrPort, Username),
     MaxAllocs = proplists:get_value(max_allocs, Opts),
     if is_pid(Owner) ->
@@ -280,20 +281,28 @@ active(#stun{class = indication,
              'DATA' = Data},
        State)
     when is_binary(Data) ->
-    State1 =
+    State2 =
         case maps:find(Addr, State#state.permissions) of
             {ok, _} ->
-                case maybe_send_to_ice_bin(State, Data) of
+                State1 =
+                    case State#state.in_use of
+                        false ->
+                            State#state.ice_bin_pid ! {used_turn_pid, self()},
+                            State#state{in_use = true};
+                        true ->
+                            State
+                    end,
+                case maybe_send_to_ice_bin(State1, Data) of
                     false ->
-                        gen_udp:send(State#state.relay_sock, Addr, Port, Data);
+                        gen_udp:send(State1#state.relay_sock, Addr, Port, Data);
                     true ->
                         pass
                 end,
-                count_sent(State, Data);
+                count_sent(State1, Data);
             error ->
                 State
         end,
-    {next_state, active, State1};
+    {next_state, active, State2};
 active(#stun{class = request,
              'CHANNEL-NUMBER' = Channel,
              'XOR-PEER-ADDRESS' = [{Addr, _Port} = Peer],
@@ -350,20 +359,25 @@ active(#stun{class = request, method = ?STUN_METHOD_CHANNEL_BIND} = Msg, State) 
 active(#turn{channel = Channel, data = Data}, State) ->
     case maps:find(Channel, State#state.channels) of
         {ok, {{Addr, Port}, _}} ->
-            case maybe_send_to_ice_bin(State, Data) of
+            State1 =
+                case State#state.in_use of
+                    false ->
+                        State#state.ice_bin_pid ! {used_turn_pid, self()},
+                        State#state{in_use = true};
+                    true ->
+                        State
+                end,
+            case maybe_send_to_ice_bin(State1, Data) of
                 false ->
-                    gen_udp:send(State#state.relay_sock, Addr, Port, Data);
+                    gen_udp:send(State1#state.relay_sock, Addr, Port, Data);
                 true ->
                     pass
             end,
-            State1 = count_sent(State, Data),
-            {next_state, active, State1};
+            State2 = count_sent(State1, Data),
+            {next_state, active, State2};
         error ->
             {next_state, active, State}
     end;
-active({ice_payload, Payload, Port}, State) ->
-    NewState = send_payload_to_client(Payload, State#state.libnice_addr, Port, State),
-    {next_state, active, NewState};
 active(Event, State) ->
     ?LOG_ERROR("Unexpected event in 'active': ~p", [Event]),
     {next_state, active, State}.
@@ -405,6 +419,10 @@ handle_info({timeout, _Tref, {channel_timeout, Channel}}, StateName, State) ->
     end;
 handle_info({'DOWN', _Ref, _, _, _}, _StateName, State) ->
     {stop, normal, State};
+handle_info({ice_payload, Payload, Port}, StateName, #state{in_use = false} = State) ->
+    State#state.ice_bin_pid ! {used_turn_pid, self()},
+    NewState = send_payload_to_client(Payload, State#state.libnice_addr, Port, State),
+    {next_state, StateName, NewState#state{in_use = true}};
 handle_info({ice_payload, Payload, Port}, StateName, State) ->
     NewState = send_payload_to_client(Payload, State#state.libnice_addr, Port, State),
     {next_state, StateName, NewState};

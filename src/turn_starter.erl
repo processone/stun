@@ -14,19 +14,19 @@
 
 -module(turn_starter).
 
--export([start/1, start/2]).
+-export([start/2]).
 
 -include("stun.hrl").
 
-start(Secret) ->
-    start(Secret, 0).
-
-start(Secret, Port) ->
+start(Secret, Opts) ->
+    IP = proplists:get_value(ip, Opts, {127, 0, 0, 1}),
+    Port = proplists:get_value(port, Opts, 0),
+    Transport = proplists:get_value(transport, Opts, udp),
     Auth_fun =
         fun(User, _Realm) ->
            Hash = crypto:mac(hmac, sha, Secret, User),
            base64:encode(Hash)
         end,
 
-    Opts = [{use_turn, true}, {auth_fun, Auth_fun}, {auth_realm, "turn.stun.localhost"}],
-    stun_listener:add_listener({127, 0, 0, 1}, Port, udp, Opts).
+    TurnOpts = [{use_turn, true}, {auth_fun, Auth_fun}, {auth_realm, "turn.stun.localhost"}],
+    stun_listener:add_listener(IP, Port, Transport, TurnOpts).
