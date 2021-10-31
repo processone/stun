@@ -240,9 +240,8 @@ process(#state{auth = user} = State,
 		    ?LOG_NOTICE("Failed long-term STUN/TURN authentication"),
 		    send(NewState, R);
 		Pass ->
-		    Key = {User, Realm, Pass},
-		    case stun_codec:check_integrity(Msg, Key) of
-			true ->
+		    case check_integrity(User, Realm, Msg, Pass) of
+			{true, Key} ->
 			    ?LOG_INFO("Accepting long-term STUN/TURN "
 				      "authentication"),
 			    process(NewState, Msg, Key);
@@ -654,6 +653,19 @@ have_nonce(Nonce, Nonces) ->
 	    {true, NewNonces};
 	_ ->
 	    {false, NewNonces}
+    end.
+
+check_integrity(User, Realm, Msg, Pass) when is_binary(Pass) ->
+    check_integrity(User, Realm, Msg, [Pass]);
+check_integrity(_User, _Realm, _Msg, []) ->
+    false;
+check_integrity(User, Realm, Msg, [Pass | T]) ->
+    Key = {User, Realm, Pass},
+    case stun_codec:check_integrity(Msg, Key) of
+	true ->
+	    {true, Key};
+	false ->
+	    check_integrity(User, Realm, Msg, T)
     end.
 
 unmap_v4_addr({{0, 0, 0, 0, 0, 16#FFFF, D7, D8}, Port}) ->

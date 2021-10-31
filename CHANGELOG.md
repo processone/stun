@@ -2,6 +2,7 @@
 
 * Improve UDP receive performance.
 * Reduce risk of UDP packet loss.
+* Support multiple passwords to facilitate rollover.
 
 # Version 1.0.44
 
