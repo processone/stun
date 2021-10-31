@@ -41,6 +41,7 @@
 
 -define(UDP_READ_PACKETS, 100).
 -define(UDP_ACTIVE, 500).
+-define(UDP_RECBUF, 1024 * 1024). % 1 MiB
 -define(MAX_LIFETIME, 3600000). %% 1 hour
 -define(DEFAULT_LIFETIME, 600000). %% 10 minutes
 -define(PERMISSION_LIFETIME, 300000). %% 5 minutes
@@ -548,6 +549,7 @@ allocate_addr(Family, Addr, Min, Max, Next, Count) ->
 			     Family,
 			     {ip, Addr},
 			     {active, ?UDP_ACTIVE},
+			     {recbuf, ?UDP_RECBUF},
 			     {read_packets, ?UDP_READ_PACKETS}]) of
 	{ok, Sock} ->
 	    case inet:sockname(Sock) of

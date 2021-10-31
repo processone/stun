@@ -36,6 +36,7 @@
 
 -define(TCP_SEND_TIMEOUT, 10000).
 -define(UDP_READ_PACKETS, 100).
+-define(UDP_RECBUF, 1024 * 1024). % 1 MiB
 -record(state, {listeners = #{}}).
 
 %%%===================================================================
@@ -151,6 +152,7 @@ start_listener(IP, Port, udp, Opts, Owner) ->
     case gen_udp:open(Port, [binary,
 			     {ip, IP},
 			     {active, false},
+			     {recbuf, ?UDP_RECBUF},
 			     {read_packets, ?UDP_READ_PACKETS},
 			     {reuseaddr, true}]) of
 	{ok, Socket} ->

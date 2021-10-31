@@ -1,6 +1,7 @@
 # Version 1.0.45
 
 * Improve UDP receive performance.
+* Reduce risk of UDP packet loss.
 
 # Version 1.0.44
 
