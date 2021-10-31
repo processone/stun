@@ -39,6 +39,8 @@
 -include("stun.hrl").
 -include("stun_logger.hrl").
 
+-define(UDP_READ_PACKETS, 100).
+-define(UDP_ACTIVE, 500).
 -define(MAX_LIFETIME, 3600000). %% 1 hour
 -define(DEFAULT_LIFETIME, 600000). %% 10 minutes
 -define(PERMISSION_LIFETIME, 300000). %% 5 minutes
@@ -379,8 +381,7 @@ handle_event(Event, StateName, State) ->
 handle_sync_event(_Event, _From, StateName, State) ->
     {reply, {error, badarg}, StateName, State}.
 
-handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
-    inet:setopts(Sock, [{active, once}]),
+handle_info({udp, _Sock, Addr, Port, Data}, StateName, State) ->
     Peer = {Addr, Port},
     case {maps:find(Addr, State#state.permissions),
 	  maps:find(Peer, State#state.peers)} of
@@ -400,6 +401,9 @@ handle_info({udp, Sock, Addr, Port, Data}, StateName, State) ->
 	{error, _} ->
 	    {next_state, StateName, State}
     end;
+handle_info({udp_passive, Sock}, StateName, State) ->
+    inet:setopts(Sock, [{active, ?UDP_ACTIVE}]),
+    {next_state, StateName, State};
 handle_info({timeout, _Tref, stop}, _StateName, State) ->
     {stop, normal, State};
 handle_info({timeout, _Tref, {permission_timeout, Addr}},
@@ -540,7 +544,11 @@ allocate_addr(Family, Addr, {Min, Max}) ->
 allocate_addr(_Family, _Addr, _Min, _Max, _Next, 0) ->
     {error, eaddrinuse};
 allocate_addr(Family, Addr, Min, Max, Next, Count) ->
-    case gen_udp:open(Next, [binary, Family, {ip, Addr}, {active, once}]) of
+    case gen_udp:open(Next, [binary,
+			     Family,
+			     {ip, Addr},
+			     {active, ?UDP_ACTIVE},
+			     {read_packets, ?UDP_READ_PACKETS}]) of
 	{ok, Sock} ->
 	    case inet:sockname(Sock) of
 		{ok, {_, Port}} ->

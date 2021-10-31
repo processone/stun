@@ -1,3 +1,7 @@
+# Version 1.0.45
+
+* Improve UDP receive performance.
+
 # Version 1.0.44
 
 * Updating fast_tls to version 1.1.13.

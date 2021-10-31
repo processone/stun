@@ -35,6 +35,7 @@
 -include("stun_logger.hrl").
 
 -define(TCP_SEND_TIMEOUT, 10000).
+-define(UDP_READ_PACKETS, 100).
 -record(state, {listeners = #{}}).
 
 %%%===================================================================
@@ -150,6 +151,7 @@ start_listener(IP, Port, udp, Opts, Owner) ->
     case gen_udp:open(Port, [binary,
 			     {ip, IP},
 			     {active, false},
+			     {read_packets, ?UDP_READ_PACKETS},
 			     {reuseaddr, true}]) of
 	{ok, Socket} ->
 	    Owner ! {self(), ok},
