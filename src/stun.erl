@@ -123,7 +123,7 @@ init([Sock, Opts]) ->
     case inet:peername(Sock) of
 	{ok, Addr} ->
 	    TRef = erlang:start_timer(?TIMEOUT, self(), stop),
-	    SockMod = get_sockmod(Opts),
+	    SockMod = get_sockmod(Opts, Sock),
 	    State = prepare_state(Opts, Sock, Addr, SockMod),
 	    CertFile = get_certfile(Opts),
 	    case maybe_starttls(Sock, SockMod, CertFile) of
@@ -692,12 +692,18 @@ is_valid_subnet({{IP1, IP2, IP3, IP4, IP5, IP6, IP7, IP8}, Mask}) ->
 is_valid_subnet(_) ->
     false.
 
-get_sockmod(Opts) ->
+get_sockmod_opt(Opts) ->
     case proplists:get_bool(tls, Opts) of
 	true ->
 	    fast_tls;
 	false ->
 	    gen_tcp
+    end.
+
+get_sockmod(Opts, Sock) ->
+    case is_tls_handshake(Sock) of
+    true  -> get_sockmod_opt(Opts);
+    false -> gen_tcp
     end.
 
 get_certfile(Opts) ->
@@ -706,6 +712,14 @@ get_certfile(Opts) ->
 	    Filename;
 	_ ->
 	    undefined
+    end.
+
+is_tls_handshake(Sock) ->
+    {ok, Data} = gen_tcp:recv(Sock, 10),
+    ok = gen_tcp:unrecv(Sock, Data),
+    case Data of
+        <<22, 3, _:4/binary, 0, _:2/binary, 3>> -> true;
+        _ -> false
     end.
 
 maybe_starttls(_Sock, fast_tls, undefined) ->
