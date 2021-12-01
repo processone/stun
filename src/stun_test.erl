@@ -102,8 +102,7 @@ bind_tls_test() ->
  		trid = TrID},
     {ok, Socket} = gen_tcp:connect(?STUN_IP, ?STUNS_PORT,
 				   [binary, {active, true}]),
-    {ok, TLSSocket} = fast_tls:tcp_to_tls(
-			Socket, [{certfile, <<"certfile.pem">>}, connect]),
+    {ok, TLSSocket} = fast_tls:tcp_to_tls(Socket, [connect]),
     ?assertEqual({ok, <<>>}, fast_tls:recv_data(TLSSocket, <<>>)),
     {ok, Addr} = fast_tls:sockname(TLSSocket),
     Pkt = stun_codec:encode(Msg),
