@@ -23,7 +23,7 @@
 
 -module(stun_test).
 
--export([bind_udp/2, bind_tcp/2, allocate_udp/5]).
+-export([bind_udp/2, bind_tcp/2, bind_tls/2, allocate_udp/5]).
 
 -define(STUN_IP, {127,0,0,1}).
 -define(STUN_PORT, 34780).
@@ -268,6 +268,28 @@ bind_tcp(Host, Port) ->
 	{ok, MsgIn = #stun{trid = TrID,
 			   'XOR-MAPPED-ADDRESS' = _Addr}} =
 	    recv(Socket, <<>>, false),
+	gen_tcp:close(Socket),
+	MsgIn
+    catch _:{badmatch, Err} ->
+	    Err
+    end.
+
+bind_tls(Host, Port) ->
+    TrID = mk_trid(),
+    MsgOut = #stun{method = ?STUN_METHOD_BINDING,
+		   class = request,
+		   trid = TrID},
+    try
+	{ok, Socket} = gen_tcp:connect(Host, Port,
+				       [binary, {active, true}]),
+	{ok, TLSSocket} = fast_tls:tcp_to_tls(Socket, [connect]),
+	{ok, <<>>} = fast_tls:recv_data(TLSSocket, <<>>),
+	Pkt = stun_codec:encode(MsgOut),
+	recv(TLSSocket, <<>>, true),
+	ok = fast_tls:send(TLSSocket, Pkt),
+	{ok, MsgIn = #stun{trid = TrID,
+			   'XOR-MAPPED-ADDRESS' = _Addr}} =
+	    recv(TLSSocket, <<>>, true),
 	gen_tcp:close(Socket),
 	MsgIn
     catch _:{badmatch, Err} ->
