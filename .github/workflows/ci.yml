@@ -15,6 +15,7 @@ jobs:
       image: erlang:${{ matrix.otp }}
     steps:
     - uses: actions/checkout@v2
+    - run: make
     - run: rebar3 compile
     - run: rebar3 xref
     - run: rebar3 dialyzer
