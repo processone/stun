@@ -122,17 +122,21 @@ init([Sock, Opts]) ->
     process_flag(trap_exit, true),
     case inet:peername(Sock) of
 	{ok, Addr} ->
-	    TRef = erlang:start_timer(?TIMEOUT, self(), stop),
-	    SockMod = get_sockmod(Opts, Sock),
-	    State = prepare_state(Opts, Sock, Addr, SockMod),
-	    CertFile = get_certfile(Opts),
-	    case maybe_starttls(Sock, SockMod, CertFile) of
-		{ok, NewSock} ->
-		    inet:setopts(Sock, [{active, once}]),
-		    {ok, session_established,
-		     State#state{tref = TRef, sock = NewSock}};
-		{error, Why} ->
-		    {stop, Why}
+	    case get_sockmod(Opts, Sock) of
+		{ok, SockMod} ->
+		    State = prepare_state(Opts, Sock, Addr, SockMod),
+		    CertFile = get_certfile(Opts),
+		    case maybe_starttls(Sock, SockMod, CertFile) of
+			{ok, NewSock} ->
+			    inet:setopts(Sock, [{active, once}]),
+			    TRef = erlang:start_timer(?TIMEOUT, self(), stop),
+			    {ok, session_established,
+			     State#state{tref = TRef, sock = NewSock}};
+			{error, Reason} ->
+			    {stop, Reason}
+		    end;
+		{error, Reason} ->
+		    {stop, Reason}
 	    end;
 	Err ->
 	    {stop, Err}
@@ -692,18 +696,21 @@ is_valid_subnet({{IP1, IP2, IP3, IP4, IP5, IP6, IP7, IP8}, Mask}) ->
 is_valid_subnet(_) ->
     false.
 
-get_sockmod_opt(Opts) ->
-    case proplists:get_bool(tls, Opts) of
-	true ->
-	    fast_tls;
-	false ->
-	    gen_tcp
-    end.
-
 get_sockmod(Opts, Sock) ->
-    case is_tls_handshake(Sock) of
-    true  -> get_sockmod_opt(Opts);
-    false -> gen_tcp
+    case proplists:get_value(tls, Opts, false) of
+	true ->
+	    {ok, fast_tls};
+	false ->
+	    {ok, gen_tcp};
+	optional ->
+	    case is_tls_handshake(Sock) of
+		true ->
+		    {ok, fast_tls};
+		false ->
+		    {ok, gen_tcp};
+		{error, _Reason} = Err ->
+		    Err
+	    end
     end.
 
 get_certfile(Opts) ->
@@ -714,13 +721,25 @@ get_certfile(Opts) ->
 	    undefined
     end.
 
-is_tls_handshake(Sock) ->
-    {ok, Data} = gen_tcp:recv(Sock, 10),
-    ok = gen_tcp:unrecv(Sock, Data),
-    case Data of
-        <<22, 3, _:4/binary, 0, _:2/binary, 3>> -> true;
-        _ -> false
+-ifdef(USE_OLD_INET_BACKEND).
+-dialyzer({[no_match], [get_sockmod/2]}).
+is_tls_handshake(_Sock) ->
+    ?LOG_ERROR("Multiplexing TCP and TLS requires a newer Erlang/OTP version"),
+    {error, eprotonosupport}.
+-else.
+is_tls_handshake({_, _, {_, Socket}}) ->
+    case socket:recvfrom(Socket, 10, [peek], ?TIMEOUT) of
+	{ok, {_, <<22, 3, _:4/binary, 0, _:2/binary, 3>>}} ->
+	    ?LOG_DEBUG("Determined transport protocol: TLS"),
+	    true;
+	{ok, {_, _}} ->
+	    ?LOG_DEBUG("Determined transport protocol: TCP"),
+	    false;
+	{error, Reason} = Err ->
+	    ?LOG_INFO("Cannot determine transport protocol: ~s", [Reason]),
+	    Err
     end.
+-endif.
 
 maybe_starttls(_Sock, fast_tls, undefined) ->
     ?LOG_ERROR("Cannot start TLS connection: option 'certfile' is not set"),

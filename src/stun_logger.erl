@@ -28,7 +28,7 @@
 	 encode_transport/1]).
 
 -type sub_domain() :: listener | stun | turn.
--type transport() :: udp | tcp | tls.
+-type transport() :: udp | tcp | tls | auto.
 -type sock_mod() :: gen_udp | gen_tcp | fast_tls.
 
 %% API.
@@ -181,10 +181,11 @@ encode_addr({_, _, _, _, _, _, _, _} = Addr) ->
 encode_addr(Addr) ->
     inet:ntoa(Addr).
 
--spec encode_transport(atom()) -> binary().
+-spec encode_transport(transport() | sock_mod()) -> binary().
 encode_transport(udp) -> <<"UDP">>;
 encode_transport(tcp) -> <<"TCP">>;
 encode_transport(tls) -> <<"TLS">>;
+encode_transport(auto) -> <<"TCP|TLS">>;
 encode_transport(gen_udp) -> <<"UDP">>;
 encode_transport(gen_tcp) -> <<"TCP">>;
 encode_transport(fast_tls) -> <<"TLS">>.

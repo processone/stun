@@ -127,20 +127,21 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 start_listener(IP, Port, Transport, Opts, Owner)
-  when Transport == tcp; Transport == tls ->
+  when Transport == tcp; Transport == tls; Transport == auto ->
     OptsWithTLS = case Transport of
-		      tls -> [tls|Opts];
-		      tcp -> Opts
+		      tcp -> Opts;
+		      tls -> [tls | Opts];
+		      auto -> [{tls, optional} | Opts]
 		  end,
-    case gen_tcp:listen(Port, [binary,
-                               {ip, IP},
-                               {packet, 0},
-                               {active, false},
-                               {reuseaddr, true},
-                               {nodelay, true},
-                               {keepalive, true},
-			       {send_timeout, ?TCP_SEND_TIMEOUT},
-			       {send_timeout_close, true}]) of
+    case listen(Port, [binary,
+		       {ip, IP},
+		       {packet, 0},
+		       {active, false},
+		       {reuseaddr, true},
+		       {nodelay, true},
+		       {keepalive, true},
+		       {send_timeout, ?TCP_SEND_TIMEOUT},
+		       {send_timeout_close, true}]) of
         {ok, ListenSocket} ->
             Owner ! {self(), ok},
 	    OptsWithTLS1 = stun:tcp_init(ListenSocket, OptsWithTLS),
@@ -164,10 +165,19 @@ start_listener(IP, Port, udp, Opts, Owner) ->
 	    Owner ! {self(), Err}
     end.
 
+-ifdef(USE_OLD_INET_BACKEND).
+listen(Port, Opts) ->
+    gen_tcp:listen(Port, Opts).
+-else.
+listen(Port, Opts) ->
+    gen_tcp:listen(Port, [{inet_backend, socket} | Opts]).
+-endif.
+
 accept(ListenSocket, Opts) ->
-    Transport = case proplists:get_bool(tls, Opts) of
+    Transport = case proplists:get_value(tls, Opts, false) of
 		    true -> tls;
-		    false -> tcp
+		    false -> tcp;
+		    optional -> auto
 		end,
     ID = stun_logger:make_id(),
     stun_logger:set_metadata(listener, Transport, ID),
@@ -221,4 +231,5 @@ format_listener_error(IP, Port, Transport, Opts, Err) ->
 	       "** Transport: ~s~n"
 	       "** Options: ~p~n"
 	       "** Reason: ~p",
-	       [stun_logger:encode_addr(IP), Port, Transport, Opts, Err]).
+	       [stun_logger:encode_addr(IP), Port,
+		stun_logger:encode_transport(Transport), Opts, Err]).

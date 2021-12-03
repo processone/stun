@@ -27,6 +27,7 @@
 
 -define(STUN_IP, {127,0,0,1}).
 -define(STUN_PORT, 34780).
+-define(AUTO_PORT, 34781).
 -define(STUNS_PORT, 53490).
 -define(RECV_TIMEOUT, timer:seconds(5)).
 -define(CHANNEL, 16#4000).
@@ -62,6 +63,13 @@ add_tls_listener_test() ->
     ?assertEqual(ok, stun_listener:add_listener(
 		       ?STUN_IP, ?STUNS_PORT, tcp,
 		       [tls, {certfile, "certfile.pem"}])).
+
+-ifndef(USE_OLD_INET_BACKEND).
+add_auto_listener_test() ->
+    ?assertEqual(ok, stun_listener:add_listener(
+		       ?STUN_IP, ?AUTO_PORT, tcp,
+		       [{tls, optional}, {certfile, "certfile.pem"}])).
+-endif.
 
 bind_udp_test() ->
     TrID = mk_trid(),
@@ -114,11 +122,53 @@ bind_tls_test() ->
        recv(TLSSocket, <<>>, true)),
     ?assertEqual(ok, gen_tcp:close(Socket)).
 
+-ifndef(USE_OLD_INET_BACKEND).
+bind_auto_test() ->
+    %% TCP
+    TrID1 = mk_trid(),
+    Msg1 = #stun{method = ?STUN_METHOD_BINDING,
+		 class = request,
+		 trid = TrID1},
+    {ok, Socket1} = gen_tcp:connect(?STUN_IP, ?AUTO_PORT,
+				    [binary, {active, false}]),
+    {ok, Addr1} = inet:sockname(Socket1),
+    Pkt1 = stun_codec:encode(Msg1),
+    ?assertEqual(ok, gen_tcp:send(Socket1, Pkt1)),
+    ?assertMatch(
+       {ok, #stun{trid = TrID1,
+		  'XOR-MAPPED-ADDRESS' = Addr1}},
+       recv(Socket1, <<>>, false)),
+    ?assertEqual(ok, gen_tcp:close(Socket1)),
+    %% TLS
+    TrID2 = mk_trid(),
+    Msg2 = #stun{method = ?STUN_METHOD_BINDING,
+		 class = request,
+		 trid = TrID2},
+    {ok, Socket2} = gen_tcp:connect(?STUN_IP, ?AUTO_PORT,
+				    [binary, {active, true}]),
+    {ok, TLSSocket} = fast_tls:tcp_to_tls(Socket2, [connect]),
+    ?assertEqual({ok, <<>>}, fast_tls:recv_data(TLSSocket, <<>>)),
+    {ok, Addr2} = fast_tls:sockname(TLSSocket),
+    Pkt2 = stun_codec:encode(Msg2),
+    recv(TLSSocket, <<>>, true),
+    ?assertEqual(ok, fast_tls:send(TLSSocket, Pkt2)),
+    ?assertMatch(
+       {ok, #stun{trid = TrID2,
+		  'XOR-MAPPED-ADDRESS' = Addr2}},
+       recv(TLSSocket, <<>>, true)),
+    ?assertEqual(ok, gen_tcp:close(Socket2)).
+-endif.
+
 del_tcp_listener_test() ->
     ?assertEqual(ok, stun_listener:del_listener(?STUN_IP, ?STUN_PORT, tcp)).
 
 del_tls_listener_test() ->
     ?assertEqual(ok, stun_listener:del_listener(?STUN_IP, ?STUNS_PORT, tcp)).
+
+-ifndef(USE_OLD_INET_BACKEND).
+del_auto_listener_test() ->
+    ?assertEqual(ok, stun_listener:del_listener(?STUN_IP, ?AUTO_PORT, tcp)).
+-endif.
 
 allocate_udp_test() ->
     {ok, Socket} = gen_udp:open(0, [binary, {ip, ?STUN_IP}, {active, false}]),

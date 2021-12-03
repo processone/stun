@@ -1,3 +1,8 @@
+# Version 1.0.46
+
+* Use new 'socket' backend for TCP/TLS connections (on Erlang/OTP 23+).
+* Support multiplexing TCP/TLS listeners (on Erlang/OTP 23+).
+
 # Version 1.0.45
 
 * Improve UDP receive performance.
