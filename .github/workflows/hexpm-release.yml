@@ -18,6 +18,6 @@ jobs:
           echo "{plugins, [rebar3_hex]}." > ~/.config/rebar3/rebar.config
 
       - name: Publish to hex.pm
-        run: rebar3 hex publish --repo hexpm --yes || head rebar3.crashdump
+        run: DEBUG=1 rebar3 hex publish --repo hexpm --yes
         env:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
