@@ -17,6 +17,26 @@ jobs:
           mkdir -p ~/.config/rebar3/
           echo "{plugins, [rebar3_hex]}." > ~/.config/rebar3/rebar.config
 
+      - run: rebar3 edoc
+
+      - name: Prepare Markdown
+        run: |
+          echo "" >>README.md
+          echo "## EDoc documentation" >>README.md
+          echo "" >>README.md
+          echo "You can check this library's " >>README.md
+          echo "[EDoc documentation](edoc.html), " >>README.md
+          echo "generated automatically from the source code comments." >>README.md
+
+      - name: Convert Markdown to HTML
+        uses: natescherer/markdown-to-html-with-github-style-action@v1.1.0
+        with:
+          path: README.md
+
+      - run: |
+          mv doc/index.html doc/edoc.html
+          mv README.html doc/index.html
+
       - name: Publish to hex.pm
         run: DEBUG=1 rebar3 hex publish --repo hexpm --yes
         env:
