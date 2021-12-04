@@ -1,3 +1,7 @@
+# Version 1.0.47
+
+* Disable new 'socket' backend for TCP/TLS connections on Windows.
+
 # Version 1.0.46
 
 * Use new 'socket' backend for TCP/TLS connections (on Erlang/OTP 23+).
