@@ -12,6 +12,7 @@ certfile.pem
 config.log
 config.status
 deps
+doc
 ebin
 priv
 rebar.lock
