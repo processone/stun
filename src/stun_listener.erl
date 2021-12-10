@@ -179,9 +179,32 @@ accept(ListenSocket, Opts) ->
 		    false -> tcp;
 		    optional -> auto
 		end,
+    Proxy = proplists:get_bool(proxy_protocol, Opts),
     ID = stun_logger:make_id(),
+    Opts1 = [{session_id, ID}|Opts],
     stun_logger:set_metadata(listener, Transport, ID),
     case gen_tcp:accept(ListenSocket) of
+	{ok, Socket} when Proxy ->
+	    case p1_proxy_protocol:decode(gen_tcp, Socket, 10000) of
+		{{Addr, Port}, {PeerAddr, PeerPort}} = SP ->
+		    Opts2 = [{sock_peer_name, SP}|Opts1],
+		    ?LOG_INFO("Accepting proxied connection: ~s -> ~s",
+			      [stun_logger:encode_addr({PeerAddr, PeerPort}),
+			       stun_logger:encode_addr({Addr, Port})]),
+		    case stun:start({gen_tcp, Socket}, Opts2) of
+			{ok, Pid} ->
+			    gen_tcp:controlling_process(Socket, Pid);
+			Err ->
+			    Err
+		    end;
+		{error, Reason} ->
+		    ?LOG_ERROR("Proxy protocol parsing failed: ~s",
+			       [inet:format_error(Reason)]),
+		    gen_tcp:close(Socket);
+		{undefined, undefined} ->
+		    gen_tcp:close(Socket)
+	    end,
+	    accept(ListenSocket, Opts);
         {ok, Socket} ->
             case {inet:peername(Socket),
                   inet:sockname(Socket)} of
@@ -189,8 +212,7 @@ accept(ListenSocket, Opts) ->
 		    ?LOG_INFO("Accepting connection: ~s -> ~s",
 			      [stun_logger:encode_addr({PeerAddr, PeerPort}),
 			       stun_logger:encode_addr({Addr, Port})]),
-		    case stun:start({gen_tcp, Socket},
-				    [{session_id, ID}|Opts]) of
+		    case stun:start({gen_tcp, Socket}, Opts1) of
                         {ok, Pid} ->
                             gen_tcp:controlling_process(Socket, Pid);
                         Err ->

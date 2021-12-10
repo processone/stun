@@ -1,3 +1,7 @@
+# Version 1.1.0
+
+* Support the HAproxy protocol (v1 and v2).
+
 # Version 1.0.47
 
 * Disable new 'socket' backend for TCP/TLS connections on Windows.

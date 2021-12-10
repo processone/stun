@@ -120,7 +120,7 @@ udp_recv(Sock, Addr, Port, Data, State) ->
 %%====================================================================
 init([Sock, Opts]) ->
     process_flag(trap_exit, true),
-    case inet:peername(Sock) of
+    case get_peername(Sock, Opts) of
 	{ok, Addr} ->
 	    case get_sockmod(Opts, Sock) of
 		{ok, SockMod} ->
@@ -711,6 +711,14 @@ get_sockmod(Opts, Sock) ->
 		{error, _Reason} = Err ->
 		    Err
 	    end
+    end.
+
+get_peername(Sock, Opts) ->
+    case proplists:get_value(sock_peer_name, Opts) of
+	{_, Addr} ->
+	    {ok, Addr};
+	undefined ->
+	    inet:peername(Sock)
     end.
 
 get_certfile(Opts) ->
