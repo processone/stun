@@ -574,6 +574,7 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 ({certfile, _}, State) -> State;
 		 ({tls, _}, State) -> State;
 		 (tls, State) -> State;
+		 ({sock_peer_name, _}, State) -> State;
 		 ({session_id, _}, State) -> State;
 		 (Opt, State) ->
 		      ?LOG_ERROR("Ignoring unknown option '~p'", [Opt]),
