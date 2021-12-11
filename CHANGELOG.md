@@ -1,6 +1,7 @@
 # Version 1.1.0
 
 * Support the HAproxy protocol (v1 and v2).
+* Don't close listener if accepting a connection fails.
 
 # Version 1.0.47
 

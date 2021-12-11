@@ -128,11 +128,21 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 start_listener(IP, Port, Transport, Opts, Owner)
   when Transport == tcp; Transport == tls; Transport == auto ->
-    OptsWithTLS = case Transport of
-		      tcp -> Opts;
-		      tls -> [tls | Opts];
-		      auto -> [{tls, optional} | Opts]
-		  end,
+    {Transport1, OptsWithTLS} =
+	case {Transport, proplists:get_value(tls, Opts)} of
+	    {tcp, false} ->
+		{tcp, Opts};
+	    {tcp, true} ->
+		{tls, Opts};
+	    {tcp, optional} ->
+		{auto, Opts};
+	    {tls, undefined} ->
+		{tls, [tls | Opts]};
+	    {auto, undefined} ->
+		{auto, [{tls, optional} | Opts]};
+	    {_Transport, _TLS} ->
+		{Transport, Opts}
+	end,
     case listen(Port, [binary,
 		       {ip, IP},
 		       {packet, 0},
@@ -145,7 +155,7 @@ start_listener(IP, Port, Transport, Opts, Owner)
         {ok, ListenSocket} ->
             Owner ! {self(), ok},
 	    OptsWithTLS1 = stun:tcp_init(ListenSocket, OptsWithTLS),
-            accept(ListenSocket, OptsWithTLS1);
+	    accept(Transport1, ListenSocket, OptsWithTLS1);
         Err ->
             Owner ! {self(), Err}
     end;
@@ -173,12 +183,7 @@ listen(Port, Opts) ->
     gen_tcp:listen(Port, [{inet_backend, socket} | Opts]).
 -endif.
 
-accept(ListenSocket, Opts) ->
-    Transport = case proplists:get_value(tls, Opts, false) of
-		    true -> tls;
-		    false -> tcp;
-		    optional -> auto
-		end,
+accept(Transport, ListenSocket, Opts) ->
     Proxy = proplists:get_bool(proxy_protocol, Opts),
     ID = stun_logger:make_id(),
     Opts1 = [{session_id, ID}|Opts],
@@ -204,7 +209,7 @@ accept(ListenSocket, Opts) ->
 		{undefined, undefined} ->
 		    gen_tcp:close(Socket)
 	    end,
-	    accept(ListenSocket, Opts);
+	    accept(Transport, ListenSocket, Opts);
         {ok, Socket} ->
             case {inet:peername(Socket),
                   inet:sockname(Socket)} of
@@ -222,7 +227,7 @@ accept(ListenSocket, Opts) ->
                     ?LOG_ERROR("Cannot fetch peername: ~p", [Err]),
                     Err
             end,
-            accept(ListenSocket, Opts);
+            accept(Transport, ListenSocket, Opts);
         Err ->
             Err
     end.
