@@ -30,7 +30,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+	 terminate/2, code_change/3]).
 
 -include("stun_logger.hrl").
 
@@ -126,23 +126,24 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-start_listener(IP, Port, Transport, Opts, Owner)
-  when Transport == tcp; Transport == tls; Transport == auto ->
-    {Transport1, OptsWithTLS} =
-	case {Transport, proplists:get_value(tls, Opts)} of
-	    {tcp, false} ->
-		{tcp, Opts};
-	    {tcp, true} ->
-		{tls, Opts};
-	    {tcp, optional} ->
-		{auto, Opts};
-	    {tls, undefined} ->
-		{tls, [tls | Opts]};
-	    {auto, undefined} ->
-		{auto, [{tls, optional} | Opts]};
-	    {_Transport, _TLS} ->
-		{Transport, Opts}
-	end,
+start_listener(IP, Port, Transport0, Opts0, Owner)
+  when Transport0 == tcp;
+       Transport0 == tls;
+       Transport0 == auto ->
+    {Transport, Opts} = case {Transport0, proplists:get_value(tls, Opts0)} of
+			    {tcp, false} ->
+				{tcp, Opts0};
+			    {tcp, true} ->
+				{tls, Opts0};
+			    {tcp, optional} ->
+				{auto, Opts0};
+			    {tls, undefined} ->
+				{tls, [tls | Opts0]};
+			    {auto, undefined} ->
+				{auto, [{tls, optional} | Opts0]};
+			    {_Transport, _TLS} ->
+				{Transport0, Opts0}
+			end,
     case listen(Port, [binary,
 		       {ip, IP},
 		       {packet, 0},
@@ -152,12 +153,12 @@ start_listener(IP, Port, Transport, Opts, Owner)
 		       {keepalive, true},
 		       {send_timeout, ?TCP_SEND_TIMEOUT},
 		       {send_timeout_close, true}]) of
-        {ok, ListenSocket} ->
-            Owner ! {self(), ok},
-	    OptsWithTLS1 = stun:tcp_init(ListenSocket, OptsWithTLS),
-	    accept(Transport1, ListenSocket, OptsWithTLS1);
-        Err ->
-            Owner ! {self(), Err}
+	{ok, ListenSocket} ->
+	    Owner ! {self(), ok},
+	    Opts1 = stun:tcp_init(ListenSocket, Opts),
+	    accept(Transport, ListenSocket, Opts1);
+	Err ->
+	    Owner ! {self(), Err}
     end;
 start_listener(IP, Port, udp, Opts, Owner) ->
     case gen_udp:open(Port, [binary,
@@ -186,13 +187,13 @@ listen(Port, Opts) ->
 accept(Transport, ListenSocket, Opts) ->
     Proxy = proplists:get_bool(proxy_protocol, Opts),
     ID = stun_logger:make_id(),
-    Opts1 = [{session_id, ID}|Opts],
+    Opts1 = [{session_id, ID} | Opts],
     stun_logger:set_metadata(listener, Transport, ID),
     case gen_tcp:accept(ListenSocket) of
 	{ok, Socket} when Proxy ->
 	    case p1_proxy_protocol:decode(gen_tcp, Socket, 10000) of
 		{{Addr, Port}, {PeerAddr, PeerPort}} = SP ->
-		    Opts2 = [{sock_peer_name, SP}|Opts1],
+		    Opts2 = [{sock_peer_name, SP} | Opts1],
 		    ?LOG_INFO("Accepting proxied connection: ~s -> ~s",
 			      [stun_logger:encode_addr({PeerAddr, PeerPort}),
 			       stun_logger:encode_addr({Addr, Port})]),
@@ -210,26 +211,26 @@ accept(Transport, ListenSocket, Opts) ->
 		    gen_tcp:close(Socket)
 	    end,
 	    accept(Transport, ListenSocket, Opts);
-        {ok, Socket} ->
-            case {inet:peername(Socket),
-                  inet:sockname(Socket)} of
-                {{ok, {PeerAddr, PeerPort}}, {ok, {Addr, Port}}} ->
+	{ok, Socket} ->
+	    case {inet:peername(Socket),
+		  inet:sockname(Socket)} of
+		{{ok, {PeerAddr, PeerPort}}, {ok, {Addr, Port}}} ->
 		    ?LOG_INFO("Accepting connection: ~s -> ~s",
 			      [stun_logger:encode_addr({PeerAddr, PeerPort}),
 			       stun_logger:encode_addr({Addr, Port})]),
 		    case stun:start({gen_tcp, Socket}, Opts1) of
-                        {ok, Pid} ->
-                            gen_tcp:controlling_process(Socket, Pid);
-                        Err ->
-                            Err
-                    end;
-                Err ->
-                    ?LOG_ERROR("Cannot fetch peername: ~p", [Err]),
-                    Err
-            end,
-            accept(Transport, ListenSocket, Opts);
-        Err ->
-            Err
+			{ok, Pid} ->
+			    gen_tcp:controlling_process(Socket, Pid);
+			Err ->
+			    Err
+		    end;
+		Err ->
+		    ?LOG_ERROR("Cannot fetch peername: ~p", [Err]),
+		    Err
+	    end,
+	    accept(Transport, ListenSocket, Opts);
+	Err ->
+	    Err
     end.
 
 udp_recv(Socket, Opts) ->
