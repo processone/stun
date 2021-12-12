@@ -200,17 +200,18 @@ accept(Transport, ListenSocket, Opts) ->
 		    case stun:start({gen_tcp, Socket}, Opts2) of
 			{ok, Pid} ->
 			    gen_tcp:controlling_process(Socket, Pid);
-			Err ->
-			    Err
+			{error, Reason} ->
+			    ?LOG_ERROR("Cannot start connection: ~s", [Reason]),
+			    gen_tcp:close(Socket)
 		    end;
 		{error, Reason} ->
-		    ?LOG_ERROR("Proxy protocol parsing failed: ~s",
+		    ?LOG_ERROR("Cannot parse proxy protocol: ~s",
 			       [inet:format_error(Reason)]),
 		    gen_tcp:close(Socket);
 		{undefined, undefined} ->
+		    ?LOG_ERROR("Cannot parse proxy protocol: unknown protocol"),
 		    gen_tcp:close(Socket)
-	    end,
-	    accept(Transport, ListenSocket, Opts);
+	    end;
 	{ok, Socket} ->
 	    case {inet:peername(Socket),
 		  inet:sockname(Socket)} of
@@ -221,17 +222,18 @@ accept(Transport, ListenSocket, Opts) ->
 		    case stun:start({gen_tcp, Socket}, Opts1) of
 			{ok, Pid} ->
 			    gen_tcp:controlling_process(Socket, Pid);
-			Err ->
-			    Err
+			{error, Reason} ->
+			    ?LOG_ERROR("Cannot start connection: ~s", [Reason]),
+			    gen_tcp:close(Socket)
 		    end;
 		Err ->
 		    ?LOG_ERROR("Cannot fetch peername: ~p", [Err]),
-		    Err
-	    end,
-	    accept(Transport, ListenSocket, Opts);
-	Err ->
-	    Err
-    end.
+		    gen_tcp:close(Socket)
+	    end;
+	{error, Reason} ->
+	    ?LOG_ERROR("Cannot accept connection: ~s", [Reason])
+    end,
+    accept(Transport, ListenSocket, Opts).
 
 udp_recv(Socket, Opts) ->
     case gen_udp:recv(Socket, 0) of
