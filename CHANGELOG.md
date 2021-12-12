@@ -2,6 +2,7 @@
 
 * Support the HAproxy protocol (v1 and v2).
 * Don't close listener if accepting a connection fails.
+* Only use new 'socket' backend for multiplexing TCP/TLS listeners.
 
 # Version 1.0.47
 

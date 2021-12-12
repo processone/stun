@@ -144,15 +144,15 @@ start_listener(IP, Port, Transport0, Opts0, Owner)
 			    {_Transport, _TLS} ->
 				{Transport0, Opts0}
 			end,
-    case listen(Port, [binary,
-		       {ip, IP},
-		       {packet, 0},
-		       {active, false},
-		       {reuseaddr, true},
-		       {nodelay, true},
-		       {keepalive, true},
-		       {send_timeout, ?TCP_SEND_TIMEOUT},
-		       {send_timeout_close, true}]) of
+    case listen(Transport, Port, [binary,
+				  {ip, IP},
+				  {packet, 0},
+				  {active, false},
+				  {reuseaddr, true},
+				  {nodelay, true},
+				  {keepalive, true},
+				  {send_timeout, ?TCP_SEND_TIMEOUT},
+				  {send_timeout_close, true}]) of
 	{ok, ListenSocket} ->
 	    Owner ! {self(), ok},
 	    Opts1 = stun:tcp_init(ListenSocket, Opts),
@@ -177,11 +177,13 @@ start_listener(IP, Port, udp, Opts, Owner) ->
     end.
 
 -ifdef(USE_OLD_INET_BACKEND).
-listen(Port, Opts) ->
+listen(_Transport, Port, Opts) ->
     gen_tcp:listen(Port, Opts).
 -else.
-listen(Port, Opts) ->
-    gen_tcp:listen(Port, [{inet_backend, socket} | Opts]).
+listen(auto, Port, Opts) ->
+    gen_tcp:listen(Port, [{inet_backend, socket} | Opts]);
+listen(_Transport, Port, Opts) ->
+    gen_tcp:listen(Port, Opts).
 -endif.
 
 accept(Transport, ListenSocket, Opts) ->
