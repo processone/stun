@@ -1,3 +1,7 @@
+# Version 1.2.0
+
+* Allow for whitelisting IP addresses/subnets.
+
 # Version 1.1.0
 
 * Support the HAproxy protocol (v1 and v2).

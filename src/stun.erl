@@ -73,7 +73,8 @@
 	 max_allocs = 10             :: non_neg_integer() | infinity,
 	 shaper = none               :: stun_shaper:shaper(),
 	 max_permissions = 10        :: non_neg_integer() | infinity,
-	 blacklist = []              :: turn:blacklist(),
+	 blacklist = []              :: turn:accesslist(),
+	 whitelist = []              :: turn:accesslist(),
 	 auth = user                 :: anonymous | user,
 	 nonces = treap:empty()      :: treap:treap(),
 	 realm = <<"">>              :: binary(),
@@ -336,6 +337,7 @@ process(State, #stun{class = request,
 		    {max_allocs, State#state.max_allocs},
 		    {max_permissions, State#state.max_permissions},
 		    {blacklist, State#state.blacklist},
+		    {whitelist, State#state.whitelist},
 		    {addr, AddrPort},
 		    {relay_ipv4_ip, State#state.relay_ipv4_ip},
 		    {relay_ipv6_ip, State#state.relay_ipv6_ip},
@@ -526,6 +528,15 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 			      State#state{blacklist = B};
 			  false ->
 			      ?LOG_ERROR("Wrong 'turn_blacklist' value: ~p",
+					 [B]),
+			      State
+		      end;
+		 ({turn_whitelist, B}, State) ->
+		      case lists:all(fun is_valid_subnet/1, B) of
+			  true ->
+			      State#state{whitelist = B};
+			  false ->
+			      ?LOG_ERROR("Wrong 'turn_whitelist' value: ~p",
 					 [B]),
 			      State
 		      end;

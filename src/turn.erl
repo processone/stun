@@ -56,9 +56,9 @@
 
 -type addr() :: {inet:ip_address(), inet:port_number()}.
 -type subnet() :: {inet:ip4_address(), 0..32} | {inet:ip6_address(), 0..128}.
--type blacklist() :: [subnet()].
+-type accesslist() :: [subnet()].
 
--export_type([blacklist/0]).
+-export_type([accesslist/0]).
 
 -record(state,
 	{sock_mod = gen_udp                :: gen_udp | gen_tcp | fast_tls,
@@ -83,7 +83,8 @@
 	 last_pkt = <<>>                   :: binary(),
 	 seq = 1                           :: non_neg_integer(),
 	 life_timer                        :: reference() | undefined,
-	 blacklist = []                    :: blacklist(),
+	 blacklist = []                    :: accesslist(),
+	 whitelist = []                    :: accesslist(),
 	 hook_fun                          :: function() | undefined,
 	 session_id                        :: binary(),
 	 rcvd_bytes = 0                    :: non_neg_integer(),
@@ -120,6 +121,7 @@ init([Opts]) ->
     SockMod = proplists:get_value(sock_mod, Opts),
     HookFun = proplists:get_value(hook_fun, Opts),
     Blacklist = proplists:get_value(blacklist, Opts) ++ ?INITIAL_BLACKLIST,
+    Whitelist = proplists:get_value(whitelist, Opts),
     State = #state{sock_mod = SockMod,
 		   sock = proplists:get_value(sock, Opts),
 		   key = proplists:get_value(key, Opts),
@@ -131,7 +133,7 @@ init([Opts]) ->
 		   server_name = proplists:get_value(server_name, Opts),
 		   username = Username, realm = Realm, addr = AddrPort,
 		   session_id = ID, owner = Owner, hook_fun = HookFun,
-		   blacklist = Blacklist},
+		   blacklist = Blacklist, whitelist = Whitelist},
     stun_logger:set_metadata(turn, SockMod, ID, AddrPort, Username),
     MaxAllocs = proplists:get_value(max_allocs, Opts),
     if is_pid(Owner) ->
@@ -583,14 +585,22 @@ family_matches(_Addr1, _Addr2) ->
 blacklisted(#state{addr = {IP, _Port}} = State) ->
     blacklisted(State, [IP]).
 
-blacklisted(#state{blacklist = Blacklist}, IPs) ->
+blacklisted(#state{blacklist = Blacklist, whitelist = Whitelist}, IPs) ->
     lists:any(
       fun(IP) ->
 	      lists:any(
 		fun({Net, Mask}) ->
 			match_subnet(IP, Net, Mask)
 		end, Blacklist)
-      end, IPs).
+      end, IPs)
+          andalso not
+	      lists:any(
+		fun(IP) ->
+			lists:any(
+			  fun({Net, Mask}) ->
+				  match_subnet(IP, Net, Mask)
+			  end, Whitelist)
+		end, IPs).
 
 match_subnet({_, _, _, _} = IP,
 	     {_, _, _, _} = Net, Mask) ->
