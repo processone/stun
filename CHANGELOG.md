@@ -1,6 +1,7 @@
 # Version 1.2.0
 
 * Allow for whitelisting IP addresses/subnets.
+* Accept expired credentials for TURN session refreshes.
 
 # Version 1.1.0
 

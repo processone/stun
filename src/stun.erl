@@ -244,12 +244,13 @@ process(#state{auth = user} = State,
 		<<"">> ->
 		    ?LOG_NOTICE("Failed long-term STUN/TURN authentication"),
 		    send(NewState, R);
-		Pass ->
+		Pass0 ->
+		    {Pass, IsExpired} = check_expired_tag(Pass0),
 		    case check_integrity(User, Realm, Msg, Pass) of
 			{true, Key} ->
 			    ?LOG_INFO("Accepting long-term STUN/TURN "
 				      "authentication"),
-			    process(NewState, Msg, Key);
+			    process(NewState, Msg, Key, IsExpired);
 			false ->
 			    ?LOG_NOTICE("Failed long-term STUN/TURN "
 					"authentication"),
@@ -288,8 +289,11 @@ process(State, Msg) when is_record(Msg, turn) ->
 process(State, _Msg) ->
     State.
 
+process(State, Msg, Secret) ->
+    process(State, Msg, Secret, false).
+
 process(State, #stun{class = request, unsupported = [_|_] = Unsupported} = Msg,
-	Secret) ->
+	Secret, _IsExpired) ->
     ?LOG_DEBUG("Rejecting request with unknown attribute(s): ~p",
 	       [Unsupported]),
     Resp = prepare_response(State, Msg),
@@ -298,7 +302,8 @@ process(State, #stun{class = request, unsupported = [_|_] = Unsupported} = Msg,
 		  'ERROR-CODE' = stun_codec:error(420)},
     send(State, R, Secret);
 process(State, #stun{class = request,
-		     method = ?STUN_METHOD_BINDING} = Msg, Secret) ->
+		     method = ?STUN_METHOD_BINDING} = Msg, Secret,
+	_IsExpired) ->
     Resp = prepare_response(State, Msg),
     AddrPort = unmap_v4_addr(State#state.peer),
     R = case stun_codec:version(Msg) of
@@ -312,14 +317,14 @@ process(State, #stun{class = request,
     run_hook(stun_query, State, Msg),
     send(State, R, Secret);
 process(#state{use_turn = false} = State,
-	#stun{class = request} = Msg, Secret) ->
+	#stun{class = request} = Msg, Secret, _IsExpired) ->
     ?LOG_NOTICE("Rejecting TURN request: TURN is disabled"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error, 'ERROR-CODE' = stun_codec:error(405)},
     send(State, R, Secret);
 process(State, #stun{class = request,
 		     method = ?STUN_METHOD_ALLOCATE} = Msg,
-	Secret) ->
+	Secret, IsExpired) ->
     Resp = prepare_response(State, Msg),
     AddrPort = State#state.peer,
     SockMod = State#state.sock_mod,
@@ -327,6 +332,10 @@ process(State, #stun{class = request,
 	{ok, Pid} ->
 	    turn:route(Pid, Msg),
 	    State;
+	_ when IsExpired ->
+	    ?LOG_NOTICE("Rejecting request: credentials expired"),
+	    R = Resp#stun{class = error, 'ERROR-CODE' = stun_codec:error(401)},
+	    send(State, R);
 	_ ->
 	    Opts = [{sock, State#state.sock},
 		    {sock_mod, SockMod},
@@ -373,15 +382,18 @@ process(State, #stun{class = request,
 	    end
     end;
 process(State, #stun{class = request,
-		     method = ?STUN_METHOD_REFRESH} = Msg, Secret) ->
+		     method = ?STUN_METHOD_REFRESH} = Msg, Secret,
+	_IsExpired) ->
     route_on_turn(State, Msg, Secret);
 process(State, #stun{class = request,
-		     method = ?STUN_METHOD_CREATE_PERMISSION} = Msg, Secret) ->
+		     method = ?STUN_METHOD_CREATE_PERMISSION} = Msg, Secret,
+	_IsExpired) ->
     route_on_turn(State, Msg, Secret);
 process(State, #stun{class = request,
-		    method = ?STUN_METHOD_CHANNEL_BIND} = Msg, Secret) ->
+		    method = ?STUN_METHOD_CHANNEL_BIND} = Msg, Secret,
+	_IsExpired) ->
     route_on_turn(State, Msg, Secret);
-process(State, #stun{class = request} = Msg, Secret) ->
+process(State, #stun{class = request} = Msg, Secret, _IsExpired) ->
     ?LOG_NOTICE("Rejecting request: Method not allowed"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error, 'ERROR-CODE' = stun_codec:error(405)},
@@ -683,6 +695,11 @@ check_integrity(User, Realm, Msg, [Pass | T]) ->
 	false ->
 	    check_integrity(User, Realm, Msg, T)
     end.
+
+check_expired_tag({expired, Pass}) ->
+    {Pass, true};
+check_expired_tag(Pass) ->
+    {Pass, false}.
 
 unmap_v4_addr({{0, 0, 0, 0, 0, 16#FFFF, D7, D8}, Port}) ->
     {{D7 bsr 8, D7 band 255, D8 bsr 8, D8 band 255}, Port};
