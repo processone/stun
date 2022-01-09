@@ -62,7 +62,6 @@
 -record(state,
 	{sock                        :: inet:socket() | fast_tls:tls_socket() | undefined,
 	 sock_mod = gen_tcp          :: gen_udp | gen_tcp | fast_tls,
-	 certfile                    :: iodata() | undefined,
 	 peer = {{0,0,0,0}, 0}       :: addr(),
 	 tref                        :: reference() | undefined,
 	 use_turn = false            :: boolean(),
@@ -126,8 +125,7 @@ init([Sock, Opts]) ->
 	    case get_sockmod(Opts, Sock) of
 		{ok, SockMod} ->
 		    State = prepare_state(Opts, Sock, Addr, SockMod),
-		    CertFile = get_certfile(Opts),
-		    case maybe_starttls(Sock, SockMod, CertFile) of
+		    case maybe_starttls(Sock, SockMod, Opts) of
 			{ok, NewSock} ->
 			    inet:setopts(Sock, [{active, once}]),
 			    TRef = erlang:start_timer(?TIMEOUT, self(), stop),
@@ -595,6 +593,9 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 ({ip, _}, State) -> State;
 		 ({backlog, _}, State) -> State;
 		 ({certfile, _}, State) -> State;
+		 ({dhfile, _}, State) -> State;
+		 ({ciphers, _}, State) -> State;
+		 ({protocol_options, _}, State) -> State;
 		 ({tls, _}, State) -> State;
 		 (tls, State) -> State;
 		 ({sock_peer_name, _}, State) -> State;
@@ -750,14 +751,6 @@ get_peername(Sock, Opts) ->
 	    inet:peername(Sock)
     end.
 
-get_certfile(Opts) ->
-    case catch iolist_to_binary(proplists:get_value(certfile, Opts)) of
-	Filename when is_binary(Filename), Filename /= <<"">> ->
-	    Filename;
-	_ ->
-	    undefined
-    end.
-
 -ifdef(USE_OLD_INET_BACKEND).
 -dialyzer({[no_match], [get_sockmod/2]}).
 is_tls_handshake(_Sock) ->
@@ -778,12 +771,28 @@ is_tls_handshake({_, _, {_, Socket}}) ->
     end.
 -endif.
 
-maybe_starttls(_Sock, fast_tls, undefined) ->
-    ?LOG_ERROR("Cannot start TLS connection: option 'certfile' is not set"),
-    {error, eprotonosupport};
-maybe_starttls(Sock, fast_tls, CertFile) ->
-    fast_tls:tcp_to_tls(Sock, [verify_none, {certfile, CertFile}]);
-maybe_starttls(Sock, gen_tcp, _CertFile) ->
+maybe_starttls(Sock, fast_tls, Opts) ->
+    case proplists:is_defined(certfile, Opts) of
+	true ->
+	    TLSOpts = lists:filter(
+			fun({certfile, _Val}) ->
+				true;
+			   ({dhfile, _Val}) ->
+				true;
+			   ({ciphers, _Val}) ->
+				true;
+			   ({protocol_options, _Val}) ->
+				true;
+			   (_Opt) ->
+				false
+			end, Opts),
+	    fast_tls:tcp_to_tls(Sock, [verify_none | TLSOpts]);
+	false ->
+	    ?LOG_ERROR("Cannot accept TLS connection: "
+		       "option 'certfile' is not set"),
+	    {error, eprotonosupport}
+    end;
+maybe_starttls(Sock, gen_tcp, _Opts) ->
     {ok, Sock}.
 
 prepare_response(State, Msg) ->

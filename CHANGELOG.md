@@ -2,6 +2,7 @@
 
 * Allow for whitelisting IP addresses/subnets.
 * Accept expired credentials for TURN session refreshes.
+* Accept additional TLS options/ciphers.
 
 # Version 1.1.0
 
