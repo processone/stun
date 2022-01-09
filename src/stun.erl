@@ -107,11 +107,11 @@ udp_init(Sock, Opts) ->
 udp_recv(Sock, Addr, Port, Data, State) ->
     NewState = prepare_state(State, Sock, {Addr, Port}, gen_udp),
     case stun_codec:decode(Data, datagram) of
- 	{ok, Msg} ->
- 	    ?LOG_DEBUG(#{verbatim => {"Received:~n~s", [stun_codec:pp(Msg)]}}),
- 	    process(NewState, Msg);
- 	Err ->
-	    ?LOG_DEBUG("Cannot parse packet: ~p", [Err]),
+	{ok, Msg} ->
+	    ?LOG_DEBUG(#{verbatim => {"Received:~n~s", [stun_codec:pp(Msg)]}}),
+	    process(NewState, Msg);
+	{error, Reason} ->
+	    ?LOG_DEBUG("Cannot parse packet: ~s", [Reason]),
 	    NewState
     end.
 
@@ -137,8 +137,8 @@ init([Sock, Opts]) ->
 		{error, Reason} ->
 		    {stop, Reason}
 	    end;
-	Err ->
-	    {stop, Err}
+	{error, Reason} ->
+	    {stop, Reason}
     end.
 
 session_established(Event, State) ->
@@ -159,8 +159,8 @@ handle_info({tcp, _Sock, TLSData}, StateName,
     case fast_tls:recv_data(NewState#state.sock, TLSData) of
 	{ok, Data} ->
 	    process_data(StateName, NewState, Data);
-	Err ->
-	    ?LOG_INFO("Connection failure: ~p", [Err]),
+	{error, Reason} ->
+	    ?LOG_INFO("Connection failure: ~s", [Reason]),
 	    {stop, normal, NewState}
     end;
 handle_info({tcp, _Sock, Data}, StateName, State) ->
@@ -372,8 +372,8 @@ process(State, #stun{class = request,
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(438)},
 		    send(State, R);
-		Err ->
-		    ?LOG_ERROR("Cannot start TURN session: ~p", [Err]),
+		{error, Reason} ->
+		    ?LOG_ERROR("Cannot start TURN session: ~s", [Reason]),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(500)},
 		    send(State, R, Secret)
