@@ -168,7 +168,7 @@ set_metadata(SubDomain, SockMod, ID, Addr) ->
 -spec make_id() -> binary().
 make_id() ->
     iolist_to_binary(
-      io_lib:format("~.36b", [erlang:unique_integer([positive])])).
+      io_lib:format("~12.36.0b", [p1_rand:uniform(16#4000000000000000)])).
 
 -spec encode_addr({inet:ip_address(), inet:port_number()} | inet:ip_address())
       -> iolist().
