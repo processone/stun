@@ -1,5 +1,7 @@
 # Version 1.2.1
 
+* Updating fast_tls to version 1.1.14.
+* Updating p1_utils to version 1.0.23.
 * Include 'SOFTWARE' attribute in responses
 * Use random session IDs
 
