@@ -1,3 +1,8 @@
+# Version 1.2.1
+
+* Include 'SOFTWARE' attribute in responses
+* Use random session IDs
+
 # Version 1.2.0
 
 * Allow for whitelisting IP addresses/subnets.
