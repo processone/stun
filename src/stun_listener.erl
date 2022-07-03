@@ -251,6 +251,10 @@ udp_recv(Socket, Opts) ->
 		NewOpts ->
 		    udp_recv(Socket, NewOpts)
 	    end;
+	{error, Reason = econnreset} ->
+	    ?LOG_INFO("Cannot receive UDP packet: ~s",
+		      [inet:format_error(Reason)]),
+	    udp_recv(Socket, Opts);
 	{error, Reason} ->
 	    ?LOG_ERROR("Unexpected UDP error: ~s", [inet:format_error(Reason)]),
 	    erlang:error(Reason)

@@ -1,6 +1,7 @@
 # Version 1.2.3
 
-* Don't complain about 'proxy_protocol' option.
+* Don't complain about `proxy_protocol` option.
+* Gracefully handle ECONNRESET error while receiving UDP data.
 
 # Version 1.2.2
 
