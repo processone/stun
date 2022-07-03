@@ -160,7 +160,7 @@ accept(Transport, ListenSocket, Opts) ->
 		    gen_tcp:close(Socket)
 	    end;
 	{error, Reason} ->
-	    ?LOG_ERROR("Cannot accept connection: ~s", [Reason])
+	    ?LOG_NOTICE("Cannot accept connection: ~s", [Reason])
     end,
     accept(Transport, ListenSocket, Opts).
 
@@ -179,13 +179,10 @@ udp_recv(Socket, Opts) ->
 		NewOpts ->
 		    udp_recv(Socket, NewOpts)
 	    end;
-	{error, Reason = econnreset} ->
-	    ?LOG_INFO("Cannot receive UDP packet: ~s",
-		      [inet:format_error(Reason)]),
-	    udp_recv(Socket, Opts);
 	{error, Reason} ->
-	    ?LOG_ERROR("Unexpected UDP error: ~s", [inet:format_error(Reason)]),
-	    erlang:error(Reason)
+	    ?LOG_NOTICE("Cannot receive UDP packet: ~s",
+			[inet:format_error(Reason)]),
+	    udp_recv(Socket, Opts)
     end.
 
 -spec log_error(ip(), port_number(), transport(), opts(), term()) -> any().
