@@ -2,6 +2,7 @@
 
 * Don't complain about `proxy_protocol` option.
 * Gracefully handle ECONNRESET error while receiving UDP data.
+* Restart listeners on failure.
 
 # Version 1.2.2
 
