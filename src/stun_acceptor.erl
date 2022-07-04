@@ -169,17 +169,8 @@ accept(Transport, ListenSocket, Opts) ->
 udp_recv(Socket, Opts) ->
     case gen_udp:recv(Socket, 0) of
 	{ok, {Addr, Port, Packet}} ->
-	    case catch stun:udp_recv(Socket, Addr, Port, Packet, Opts) of
-		{'EXIT', Reason} ->
-		    ?LOG_ERROR("Cannot process UDP packet:~n"
-			       "** Source: ~s~n"
-			       "** Reason: ~p~n** Packet: ~p",
-			       [stun_logger:encode_addr({Addr, Port}), Reason,
-				Packet]),
-		    udp_recv(Socket, Opts);
-		NewOpts ->
-		    udp_recv(Socket, NewOpts)
-	    end;
+	    NewOpts = stun:udp_recv(Socket, Addr, Port, Packet, Opts),
+	    udp_recv(Socket, NewOpts);
 	{error, Reason} ->
 	    ?LOG_NOTICE("Cannot receive UDP packet: ~s",
 			[inet:format_error(Reason)]),
