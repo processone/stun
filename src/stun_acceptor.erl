@@ -130,7 +130,7 @@ accept(Transport, ListenSocket, Opts) ->
 			{ok, Pid} ->
 			    gen_tcp:controlling_process(Socket, Pid);
 			{error, Reason} ->
-			    ?LOG_ERROR("Cannot start connection: ~s", [Reason]),
+			    ?LOG_NOTICE("Cannot start connection: ~s", [Reason]),
 			    gen_tcp:close(Socket)
 		    end;
 		{error, Reason} ->
@@ -152,11 +152,12 @@ accept(Transport, ListenSocket, Opts) ->
 			{ok, Pid} ->
 			    gen_tcp:controlling_process(Socket, Pid);
 			{error, Reason} ->
-			    ?LOG_ERROR("Cannot start connection: ~s", [Reason]),
+			    ?LOG_NOTICE("Cannot start connection: ~s",
+					[Reason]),
 			    gen_tcp:close(Socket)
 		    end;
 		Err ->
-		    ?LOG_ERROR("Cannot fetch peername: ~p", [Err]),
+		    ?LOG_NOTICE("Cannot fetch peername: ~p", [Err]),
 		    gen_tcp:close(Socket)
 	    end;
 	{error, Reason} ->
