@@ -1,6 +1,4 @@
 %%%----------------------------------------------------------------------
-%%% File    : stun_listener_sup.erl
-%%% Author  : Holger Weiss <holger@zedat.fu-berlin.de>
 %%% Purpose : STUN/TURN listener (parent) supervisor
 %%% Created :  3 Jul 2022 by Holger Weiss <holger@zedat.fu-berlin.de>
 %%%
@@ -46,7 +44,6 @@ init([]) ->
 		    type => supervisor,
 		    start => {stun_acceptor_sup, start_link, []}},
 		  #{id => stun_listener,
-		    type => worker,
-		    start => {stun_listener, start_link, []},
-		    shutdown => 2000}],
+		    shutdown => 2000,
+		    start => {stun_listener, start_link, []}}],
     {ok, {SupFlags, ChildSpecs}}.

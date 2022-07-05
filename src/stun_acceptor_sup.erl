@@ -43,7 +43,6 @@ init([]) ->
 		 intensity => 10,
 		 period => 1},
     ChildSpecs = [#{id => stun_acceptor,
-		    type => worker,
-		    start => {stun_acceptor, start_link, []},
-		    shutdown => brutal_kill}],
+		    shutdown => brutal_kill,
+		    start => {stun_acceptor, start_link, []}}],
     {ok, {SupFlags, ChildSpecs}}.

@@ -45,9 +45,13 @@ start_link() ->
 %%%===================================================================
 
 init([]) ->
-    {ok, {{simple_one_for_one, 10, 1},
-          [{undefined, {stun, start_link, []},
-            temporary, 5000, worker, [stun]}]}}.
+    SupFlags = #{strategy => simple_one_for_one,
+		 intensity => 10,
+		 period => 1},
+    ChildSpecs = [#{id => stun,
+		    restart => temporary,
+		    start => {stun, start_link, []}}],
+    {ok, {SupFlags, ChildSpecs}}.
 
 %%%===================================================================
 %%% Internal functions
