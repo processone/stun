@@ -179,7 +179,7 @@ udp_recv(Socket, Opts) ->
 
 -spec log_error(ip(), port_number(), transport(), opts(), term()) -> any().
 log_error(IP, Port, Transport, Opts, Reason) ->
-    ?LOG_ERROR("Cannot start listener:~n"
+    ?LOG_DEBUG("Cannot start listener:~n"
 	       "** IP: ~s~n"
 	       "** Port: ~B~n"
 	       "** Transport: ~s~n"
