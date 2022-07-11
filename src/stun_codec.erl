@@ -252,9 +252,10 @@ dec_attr(?STUN_ATTR_XOR_PEER_ADDRESS, Val, Msg) ->
     Tail = Msg#stun.'XOR-PEER-ADDRESS',
     Msg#stun{'XOR-PEER-ADDRESS' = [AddrPort|Tail]};
 dec_attr(?STUN_ATTR_REQUESTED_ADDRESS_FAMILY, Val, Msg) ->
-    Family = case Val of
-		 <<1:8, _:3/binary>> -> ipv4;
-		 <<2:8, _:3/binary>> -> ipv6
+    <<FamilyInt, _:3/binary>> = Val,
+    Family = case FamilyInt of
+		 1 -> ipv4;
+		 2 -> ipv6
 	     end,
     Msg#stun{'REQUESTED-ADDRESS-FAMILY' = Family};
 dec_attr(?STUN_ATTR_REQUESTED_TRANSPORT, Val, Msg) ->
