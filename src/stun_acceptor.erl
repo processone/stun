@@ -160,7 +160,7 @@ accept(Transport, ListenSocket, Opts) ->
 		    ?LOG_NOTICE("Cannot fetch peername: ~p", [Err]),
 		    gen_tcp:close(Socket)
 	    end;
-	{error, Reason} ->
+	{error, Reason} when Reason /= closed ->
 	    ?LOG_NOTICE("Cannot accept connection: ~s", [Reason])
     end,
     accept(Transport, ListenSocket, Opts).
@@ -171,7 +171,7 @@ udp_recv(Socket, Opts) ->
 	{ok, {Addr, Port, Packet}} ->
 	    NewOpts = stun:udp_recv(Socket, Addr, Port, Packet, Opts),
 	    udp_recv(Socket, NewOpts);
-	{error, Reason} ->
+	{error, Reason} when Reason /= closed ->
 	    ?LOG_NOTICE("Cannot receive UDP packet: ~s",
 			[inet:format_error(Reason)]),
 	    udp_recv(Socket, Opts)
