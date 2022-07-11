@@ -161,7 +161,8 @@ accept(Transport, ListenSocket, Opts) ->
 		    gen_tcp:close(Socket)
 	    end;
 	{error, Reason} when Reason /= closed ->
-	    ?LOG_NOTICE("Cannot accept connection: ~s", [Reason])
+	    ?LOG_NOTICE("Cannot accept connection: ~s",
+			[inet:format_error(Reason)])
     end,
     accept(Transport, ListenSocket, Opts).
 
