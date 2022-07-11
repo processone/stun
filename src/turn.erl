@@ -157,9 +157,10 @@ wait_for_allocate(#stun{class = request,
 			method = ?STUN_METHOD_ALLOCATE} = Msg,
 		  State) ->
     Family = case Msg#stun.'REQUESTED-ADDRESS-FAMILY' of
-		 undefined -> inet;
 		 ipv4 -> inet;
-		 ipv6 -> inet6
+		 ipv6 -> inet6;
+		 undefined -> inet;
+		 unknown -> unknown
 	     end,
     IsBlacklisted = blacklisted(State),
     Resp = prepare_response(State, Msg),
@@ -179,6 +180,11 @@ wait_for_allocate(#stun{class = request,
 	    R = Resp#stun{class = error,
 			  'UNKNOWN-ATTRIBUTES' = [?STUN_ATTR_DONT_FRAGMENT],
 			  'ERROR-CODE' = stun_codec:error(420)},
+	    {stop, normal, send(State, R)};
+       Family == unknown ->
+	    ?LOG_NOTICE("Rejecting allocation request: unknown address family"),
+	    R = Resp#stun{class = error,
+			  'ERROR-CODE' = stun_codec:error(440)},
 	    {stop, normal, send(State, R)};
        Family == inet6, State#state.relay_ipv6_ip == undefined ->
 	    ?LOG_NOTICE("Rejecting allocation request: IPv6 not supported"),

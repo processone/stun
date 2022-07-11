@@ -1,5 +1,6 @@
 # Version 1.2.4
 
+* Improve handling of invalid `REQUESTED-ADDRESS-FAMILY` value.
 * Reopen listener sockets if they were closed.
 
 # Version 1.2.3

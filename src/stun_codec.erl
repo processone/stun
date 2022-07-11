@@ -255,7 +255,8 @@ dec_attr(?STUN_ATTR_REQUESTED_ADDRESS_FAMILY, Val, Msg) ->
     <<FamilyInt, _:3/binary>> = Val,
     Family = case FamilyInt of
 		 1 -> ipv4;
-		 2 -> ipv6
+		 2 -> ipv6;
+		 _ -> unknown
 	     end,
     Msg#stun{'REQUESTED-ADDRESS-FAMILY' = Family};
 dec_attr(?STUN_ATTR_REQUESTED_TRANSPORT, Val, Msg) ->
