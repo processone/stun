@@ -61,8 +61,7 @@ handle_call({add_listener, IP, Port, Transport, Opts}, _From,
 	{ok, _PID} ->
 	    {reply, {error, already_started}, State};
 	error ->
-	    Args = [IP, Port, Transport, Opts],
-	    case supervisor:start_child(stun_acceptor_sup, Args) of
+	    case stun_acceptor:start(IP, Port, Transport, Opts) of
 		{ok, PID} ->
 		    NewListeners = maps:put(Key, PID, Listeners),
 		    {reply, ok, State#state{listeners = NewListeners}};
@@ -75,7 +74,7 @@ handle_call({del_listener, IP, Port, Transport}, _From,
     Key = {IP, Port, Transport},
     case maps:find(Key, Listeners) of
 	{ok, PID} ->
-	    case supervisor:terminate_child(stun_acceptor_sup, PID) of
+	    case stun_acceptor:stop(PID) of
 		ok ->
 		    NewListeners = maps:remove(Key, Listeners),
 		    {reply, ok, State#state{listeners = NewListeners}};
@@ -99,7 +98,7 @@ handle_info(Info, State) ->
 
 terminate(_Reason, #state{listeners = Listeners}) ->
     lists:foreach(fun(PID) ->
-			  _ = supervisor:terminate_child(stun_acceptor_sup, PID)
+			  _ = stun_acceptor:stop(PID)
 		  end, maps:values(Listeners)).
 
 code_change(_OldVsn, State, _Extra) ->

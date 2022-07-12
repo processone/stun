@@ -23,6 +23,7 @@
 
 -module(stun_acceptor).
 -author('holger@zedat.fu-berlin.de').
+-export([start/4, stop/1]).
 -export([start_link/4]).
 -export([init/4]).
 
@@ -40,6 +41,15 @@
 -type opts() :: proplist:proplist().
 
 %% API.
+
+-spec start(ip(), port_number(), transport(), opts())
+      -> {ok, pid()} | {error, term()}.
+start(IP, Port, Transport, Opts) ->
+    supervisor:start_child(stun_acceptor_sup, [IP, Port, Transport, Opts]).
+
+-spec stop(pid()) -> ok | {error, term()}.
+stop(Pid) ->
+    supervisor:terminate_child(stun_acceptor_sup, Pid).
 
 -spec start_link(ip(), port_number(), transport(), opts())
       -> {ok, pid()} | {error, term()}.
