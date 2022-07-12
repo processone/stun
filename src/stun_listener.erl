@@ -57,13 +57,13 @@ init([]) ->
 handle_call({add_listener, IP, Port, Transport, Opts}, _From,
 	    #state{listeners = Listeners} = State) ->
     Key = {IP, Port, Transport},
-    case maps:find(Key, Listeners) of
-	{ok, _PID} ->
+    case Listeners of
+	#{Key := _Pid} ->
 	    {reply, {error, already_started}, State};
-	error ->
+	#{} ->
 	    case stun_acceptor:start(IP, Port, Transport, Opts) of
-		{ok, PID} ->
-		    NewListeners = maps:put(Key, PID, Listeners),
+		{ok, Pid} ->
+		    NewListeners = Listeners#{Key => Pid},
 		    {reply, ok, State#state{listeners = NewListeners}};
 		{error, _Reason} = Err ->
 		    {reply, Err, State}
@@ -72,16 +72,16 @@ handle_call({add_listener, IP, Port, Transport, Opts}, _From,
 handle_call({del_listener, IP, Port, Transport}, _From,
 	    #state{listeners = Listeners} = State) ->
     Key = {IP, Port, Transport},
-    case maps:find(Key, Listeners) of
-	{ok, PID} ->
-	    case stun_acceptor:stop(PID) of
+    case Listeners of
+	#{Key := Pid} ->
+	    case stun_acceptor:stop(Pid) of
 		ok ->
 		    NewListeners = maps:remove(Key, Listeners),
 		    {reply, ok, State#state{listeners = NewListeners}};
 		{error, _Reason} = Err ->
 		    {reply, Err, State}
 	    end;
-	error ->
+	#{} ->
 	    {reply, {error, not_found}, State}
     end;
 handle_call(Request, From, State) ->
@@ -97,8 +97,8 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, #state{listeners = Listeners}) ->
-    lists:foreach(fun(PID) ->
-			  _ = stun_acceptor:stop(PID)
+    lists:foreach(fun(Pid) ->
+			  _ = stun_acceptor:stop(Pid)
 		  end, maps:values(Listeners)).
 
 code_change(_OldVsn, State, _Extra) ->
