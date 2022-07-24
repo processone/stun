@@ -168,11 +168,13 @@ wait_for_allocate(#stun{class = request,
 	    ?LOG_NOTICE("Rejecting allocation request: no transport requested"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
+	    run_hook(protocol_error, State, R),
 	    {stop, normal, send(State, R)};
        Msg#stun.'REQUESTED-TRANSPORT' == unknown ->
 	    ?LOG_NOTICE("Rejecting allocation request: unsupported transport"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(442)},
+	    run_hook(protocol_error, State, R),
 	    {stop, normal, send(State, R)};
        Msg#stun.'DONT-FRAGMENT' == true ->
 	    ?LOG_NOTICE("Rejecting allocation request: dont-fragment not "
@@ -180,22 +182,26 @@ wait_for_allocate(#stun{class = request,
 	    R = Resp#stun{class = error,
 			  'UNKNOWN-ATTRIBUTES' = [?STUN_ATTR_DONT_FRAGMENT],
 			  'ERROR-CODE' = stun_codec:error(420)},
+	    run_hook(protocol_error, State, R),
 	    {stop, normal, send(State, R)};
        Family == unknown ->
 	    ?LOG_NOTICE("Rejecting allocation request: unknown address family"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(440)},
+	    run_hook(protocol_error, State, R),
 	    {stop, normal, send(State, R)};
        Family == inet6, State#state.relay_ipv6_ip == undefined ->
 	    ?LOG_NOTICE("Rejecting allocation request: IPv6 not supported"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(440)},
+	    run_hook(protocol_error, State, R),
 	    {stop, normal, send(State, R)};
        IsBlacklisted ->
 	    ?LOG_NOTICE("Rejecting allocation request: Client address is "
 			"blacklisted"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(403)},
+	    run_hook(protocol_error, State, R),
 	    {stop, normal, send(State, R)};
        true ->
 	    RelayIP = case Family of
@@ -225,6 +231,7 @@ wait_for_allocate(#stun{class = request,
 			       [format_error(Err)]),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(508)},
+		    run_hook(protocol_error, State, R),
 		    {stop, normal, send(State, R)}
 	    end
     end;
@@ -241,6 +248,7 @@ active(#stun{class = request,
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(437)},
+    run_hook(protocol_error, State, R),
     {next_state, active, send(State, R)};
 active(#stun{class = request,
 	     'REQUESTED-ADDRESS-FAMILY' = ipv4,
@@ -250,6 +258,7 @@ active(#stun{class = request,
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(443)},
+    run_hook(protocol_error, State, R),
     {next_state, active, send(State, R)};
 active(#stun{class = request,
 	     'REQUESTED-ADDRESS-FAMILY' = ipv6,
@@ -259,6 +268,7 @@ active(#stun{class = request,
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(443)},
+    run_hook(protocol_error, State, R),
     {next_state, active, send(State, R)};
 active(#stun{class = request,
 	     method = ?STUN_METHOD_REFRESH} = Msg, State) ->
@@ -296,6 +306,7 @@ active(#stun{class = request,
 	    ?LOG_NOTICE("Rejecting permission creation request: ~s", [Txt]),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = Err},
+	    run_hook(protocol_error, State, R),
 	    {next_state, active, send(State, R)}
     end;
 active(#stun{class = indication,
@@ -323,6 +334,7 @@ active(#stun{class = request,
 			"to a different channel (~.16B)", [OldChannel]),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
+	    run_hook(protocol_error, State, R),
 	    {next_state, active, send(State, R)};
 	{{ok, {OldPeer, _}}, _} when Peer /= OldPeer ->
 	    ?LOG_NOTICE("Rejecting channel binding request: Channel already "
@@ -330,6 +342,7 @@ active(#stun{class = request,
 			[stun_logger:encode_addr(OldPeer)]),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
+	    run_hook(protocol_error, State, R),
 	    {next_state, active, send(State, R)};
 	{FindResult, _} ->
 	    case update_permissions(State, [Addr]) of
@@ -356,6 +369,7 @@ active(#stun{class = request,
 		    ?LOG_NOTICE("Rejecting channel binding request: ~s", [Txt]),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = Err},
+		    run_hook(protocol_error, State, R),
 		    {next_state, active, send(State, R)}
 	    end
     end;
@@ -366,6 +380,7 @@ active(#stun{class = request,
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(400)},
+    run_hook(protocol_error, State, R),
     {next_state, active, send(State, R)};
 active(#turn{channel = Channel, data = Data}, State) ->
     case maps:find(Channel, State#state.channels) of
@@ -689,36 +704,42 @@ count_rcvd(#state{rcvd_bytes = RcvdSize,
     State#state{rcvd_bytes = RcvdSize + byte_size(Data),
 		rcvd_pkts = RcvdPkts + 1}.
 
-run_hook(HookName, #state{session_id = ID,
-			  username = User,
-			  realm = Realm,
-			  addr = Client,
-			  sock_mod = SockMod,
-			  hook_fun = HookFun} = State)
+run_hook(HookName, State) ->
+    run_hook(HookName, State, #stun{}).
+
+run_hook(HookName,
+	 #state{session_id = ID,
+		username = User,
+		realm = Realm,
+		addr = Client,
+		sock_mod = SockMod,
+		hook_fun = HookFun} = State,
+	 #stun{'ERROR-CODE' = Reason})
   when is_function(HookFun) ->
-    Info0 = #{id => ID,
+    Info1 = #{id => ID,
 	      user => User,
 	      realm => Realm,
 	      client => Client,
-	      transport => stun_logger:encode_transport(SockMod)},
-    Info = case {HookName, State} of
-	       {turn_session_start, _State} ->
-		   Info0;
-	       {turn_session_stop, #state{sent_bytes = SentBytes,
-					  sent_pkts = SentPkts,
-					  rcvd_bytes = RcvdBytes,
-					  rcvd_pkts = RcvdPkts}} ->
-		   Info0#{sent_bytes => SentBytes,
-			  sent_pkts => SentPkts,
-			  rcvd_bytes => RcvdBytes,
-			  rcvd_pkts => RcvdPkts,
-			  duration => get_duration(State)}
+	      transport => stun_logger:encode_transport(SockMod),
+	      reason => Reason},
+    Info2 = case {HookName, State} of
+		{turn_session_start, _State} ->
+		    Info1;
+		{turn_session_stop, #state{sent_bytes = SentBytes,
+					   sent_pkts = SentPkts,
+					   rcvd_bytes = RcvdBytes,
+					   rcvd_pkts = RcvdPkts}} ->
+		    Info1#{sent_bytes => SentBytes,
+			   sent_pkts => SentPkts,
+			   rcvd_bytes => RcvdBytes,
+			   rcvd_pkts => RcvdPkts,
+			   duration => get_duration(State)}
 	   end,
     ?LOG_DEBUG("Running '~s' hook", [HookName]),
-    try HookFun(HookName, Info)
+    try HookFun(HookName, Info2)
     catch _:Err -> ?LOG_ERROR("Hook '~s' failed: ~p", [HookName, Err])
     end;
-run_hook(HookName, _State) ->
+run_hook(HookName, _State, _Msg) ->
     ?LOG_DEBUG("No callback function specified for '~s' hook", [HookName]),
     ok.
 

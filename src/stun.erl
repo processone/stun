@@ -221,6 +221,7 @@ process(#state{auth = anonymous} = State,
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(401)},
+    run_hook(protocol_error, State, R),
     send(State, R);
 process(#state{auth = user} = State,
 	#stun{class = request,
@@ -241,6 +242,7 @@ process(#state{auth = user} = State,
 	    case (State#state.auth_fun)(User, Realm) of
 		<<"">> ->
 		    ?LOG_NOTICE("Failed long-term STUN/TURN authentication"),
+		    run_hook(protocol_error, State, R),
 		    send(NewState, R);
 		Pass0 ->
 		    {Pass, IsExpired} = check_expired_tag(Pass0),
@@ -252,6 +254,7 @@ process(#state{auth = user} = State,
 			false ->
 			    ?LOG_NOTICE("Failed long-term STUN/TURN "
 					"authentication"),
+			    run_hook(protocol_error, State, R),
 			    send(NewState, R)
 		    end
 	    end;
@@ -262,6 +265,7 @@ process(#state{auth = user} = State,
 			  'ERROR-CODE' = stun_codec:error(438),
 			  'REALM' = State#state.realm,
 			  'NONCE' = NewNonce},
+	    run_hook(protocol_error, State, R),
 	    send(State#state{nonces = NewNonces}, R)
     end;
 process(State, #stun{class = request,
@@ -272,12 +276,14 @@ process(State, #stun{class = request,
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(401)},
+    run_hook(protocol_error, State, R),
     send(State, R);
 process(State, #stun{class = request} = Msg) ->
     ?LOG_NOTICE("Rejecting malformed request"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(400)},
+    run_hook(protocol_error, State, R),
     send(State, R);
 process(State, #stun{class = indication,
 		     method = ?STUN_METHOD_SEND} = Msg) ->
@@ -298,6 +304,7 @@ process(State, #stun{class = request, unsupported = [_|_] = Unsupported} = Msg,
     R = Resp#stun{class = error,
 		  'UNKNOWN-ATTRIBUTES' = Unsupported,
 		  'ERROR-CODE' = stun_codec:error(420)},
+    run_hook(protocol_error, State, R),
     send(State, R, Secret);
 process(State, #stun{class = request,
 		     method = ?STUN_METHOD_BINDING} = Msg, Secret,
@@ -319,6 +326,7 @@ process(#state{use_turn = false} = State,
     ?LOG_NOTICE("Rejecting TURN request: TURN is disabled"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error, 'ERROR-CODE' = stun_codec:error(405)},
+    run_hook(protocol_error, State, R),
     send(State, R, Secret);
 process(State, #stun{class = request,
 		     method = ?STUN_METHOD_ALLOCATE} = Msg,
@@ -333,6 +341,7 @@ process(State, #stun{class = request,
 	_ when IsExpired ->
 	    ?LOG_NOTICE("Rejecting request: credentials expired"),
 	    R = Resp#stun{class = error, 'ERROR-CODE' = stun_codec:error(401)},
+	    run_hook(protocol_error, State, R),
 	    send(State, R);
 	_ ->
 	    Opts = [{sock, State#state.sock},
@@ -366,16 +375,19 @@ process(State, #stun{class = request,
 		    ?LOG_NOTICE("Rejecting request: Allocation quota reached"),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(486)},
+		    run_hook(protocol_error, State, R),
 		    send(State, R, Secret);
 		{error, stale} ->
 		    ?LOG_NOTICE("Rejecting request: Stale nonce"),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(438)},
+		    run_hook(protocol_error, State, R),
 		    send(State, R);
 		{error, Reason} ->
 		    ?LOG_ERROR("Cannot start TURN session: ~s", [Reason]),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(500)},
+		    run_hook(protocol_error, State, R),
 		    send(State, R, Secret)
 	    end
     end;
@@ -395,6 +407,7 @@ process(State, #stun{class = request} = Msg, Secret, _IsExpired) ->
     ?LOG_NOTICE("Rejecting request: Method not allowed"),
     Resp = prepare_response(State, Msg),
     R = Resp#stun{class = error, 'ERROR-CODE' = stun_codec:error(405)},
+    run_hook(protocol_error, State, R),
     send(State, R, Secret).
 
 process_data(NextStateName, #state{buf = Buf} = State, Data) ->
@@ -460,6 +473,7 @@ route_on_turn(State, Msg, Pass) ->
 		    Resp = prepare_response(State, Msg),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(437)},
+		    run_hook(protocol_error, State, R),
 		    send(State, R, Pass);
 		_ ->
 		    State
@@ -809,14 +823,16 @@ run_hook(HookName,
 		sock_mod = SockMod,
 		hook_fun = HookFun},
 	 #stun{'USERNAME' = User,
-	       'REALM' = Realm} = Msg)
+	       'REALM' = Realm,
+	       'ERROR-CODE' = Reason} = Msg)
   when is_function(HookFun) ->
     Info = #{id => ID,
 	     user => User,
 	     realm => Realm,
 	     client => Client,
 	     transport => stun_logger:encode_transport(SockMod),
-	     version => stun_codec:version(Msg)},
+	     version => stun_codec:version(Msg),
+	     reason => Reason},
     ?LOG_DEBUG("Running '~s' hook", [HookName]),
     try HookFun(HookName, Info)
     catch _:Err -> ?LOG_ERROR("Hook '~s' failed: ~p", [HookName, Err])
