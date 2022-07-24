@@ -62,7 +62,11 @@ add_allocation(AddrPort, _User, _Realm, _MaxAllocs, Pid) ->
     ok.
 
 del_allocation(AddrPort, _User, _Realm) ->
-    ets:delete(turn_allocs, AddrPort),
+    % Catch the case where an allocation is deleted after turn_sm was terminated
+    % during shutdown.
+    try ets:delete(turn_allocs, AddrPort)
+    catch _:badarg -> ok
+    end,
     ok.
 
 %%====================================================================
