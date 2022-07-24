@@ -144,7 +144,7 @@ add_metadata(Meta) ->
 filter(#{meta := #{domain := [stun | _]},
 	 msg := {report, #{verbatim := Msg}}} = Event,
        _Extra) ->
-    Event#{msg => Msg};
+    Event#{msg := Msg};
 filter(#{meta := #{domain := [stun | _],
 		   stun_transport := _Transport} = Meta,
 	 msg := {Format, Args}} = Event,
@@ -155,7 +155,7 @@ filter(#{meta := #{domain := [stun | _],
 	       _ ->
 		   io_lib:format(Format, Args)
 	   end,
-    Event#{msg => format_msg(Text, Meta)};
+    Event#{msg := format_msg(Text, Meta)};
 filter(_Event, _Extra) ->
     ignore.
 -endif.
