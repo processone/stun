@@ -1,3 +1,7 @@
+# Version 1.2.5
+
+* Hand over error events to callback function.
+
 # Version 1.2.4
 
 * Improve handling of invalid `REQUESTED-ADDRESS-FAMILY` value.
