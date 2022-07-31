@@ -1,6 +1,7 @@
 # Version 1.2.5
 
 * Hand over error events to callback function.
+* Improve TCP/TLS performance if no traffic shaper is configured.
 
 # Version 1.2.4
 

@@ -54,6 +54,7 @@
 
 -define(MAX_BUF_SIZE, 64*1024). %% 64kb
 -define(TIMEOUT, 60000). %% 1 minute
+-define(TCP_ACTIVE, 500).
 -define(NONCE_LIFETIME, 60*1000*1000). %% 1 minute (in usec)
 -define(SERVER_NAME, <<"P1 STUN library">>).
 
@@ -127,10 +128,10 @@ init([Sock, Opts]) ->
 		    State = prepare_state(Opts, Sock, Addr, SockMod),
 		    case maybe_starttls(Sock, SockMod, Opts) of
 			{ok, NewSock} ->
-			    inet:setopts(Sock, [{active, once}]),
 			    TRef = erlang:start_timer(?TIMEOUT, self(), stop),
-			    {ok, session_established,
-			     State#state{tref = TRef, sock = NewSock}};
+			    NewState = State#state{sock = NewSock, tref = TRef},
+			    activate_socket(NewState),
+			    {ok, session_established, NewState};
 			{error, Reason} ->
 			    {stop, Reason}
 		    end;
@@ -166,6 +167,9 @@ handle_info({tcp, _Sock, TLSData}, StateName,
 handle_info({tcp, _Sock, Data}, StateName, State) ->
     NewState = update_shaper(State, Data),
     process_data(StateName, NewState, Data);
+handle_info({tcp_passive, _Sock}, StateName, State) ->
+    activate_socket(State),
+    {next_state, StateName, State};
 handle_info({tcp_closed, _Sock}, _StateName, State) ->
     ?LOG_INFO("Connection reset by peer"),
     {stop, normal, State};
@@ -428,6 +432,8 @@ process_data(NextStateName, #state{buf = Buf} = State, Data) ->
 	    {stop, normal, State}
     end.
 
+update_shaper(#state{shaper = none} = State, _Data) ->
+    State;
 update_shaper(#state{shaper = Shaper} = State, Data) ->
     {NewShaper, Pause} = stun_shaper:update(Shaper, size(Data)),
     if Pause > 0 ->
@@ -644,13 +650,14 @@ prepare_addr(T) when is_tuple(T) ->
 	    {error, einval}
     end.
 
+activate_socket(#state{sock = Sock, sock_mod = gen_tcp, shaper = none}) ->
+    inet:setopts(Sock, [{active, ?TCP_ACTIVE}]);
+activate_socket(#state{sock = Sock, sock_mod = SockMod, shaper = none}) ->
+    SockMod:setopts(Sock, [{active, ?TCP_ACTIVE}]);
+activate_socket(#state{sock = Sock, sock_mod = gen_tcp}) ->
+    inet:setopts(Sock, [{active, once}]);
 activate_socket(#state{sock = Sock, sock_mod = SockMod}) ->
-    case SockMod of
-	gen_tcp ->
-	    inet:setopts(Sock, [{active, once}]);
-	_ ->
-	    SockMod:setopts(Sock, [{active, once}])
-    end.
+    SockMod:setopts(Sock, [{active, once}]).
 
 cancel_timer(undefined) ->
     ok;
