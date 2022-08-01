@@ -733,7 +733,9 @@ run_hook(HookName,
 			   sent_pkts => SentPkts,
 			   rcvd_bytes => RcvdBytes,
 			   rcvd_pkts => RcvdPkts,
-			   duration => get_duration(State)}
+			   duration => get_duration(State)};
+		{protocol_error, _State} ->
+		    Info1
 	   end,
     ?LOG_DEBUG("Running '~s' hook", [HookName]),
     try HookFun(HookName, Info2)
