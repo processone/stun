@@ -423,7 +423,7 @@ recv(TLSSocket, Buf, true) ->
 		more ->
 		    recv(TLSSocket, NewBuf, true)
 	    end
-    after 100 ->
+    after 1000 ->
 	    ok
     end.
 
