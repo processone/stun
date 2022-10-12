@@ -1,3 +1,7 @@
+# Version 1.2.6
+
+* Increase receive timeout
+
 # Version 1.2.5
 
 * Hand over error events to callback function.
