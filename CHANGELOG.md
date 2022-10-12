@@ -1,5 +1,6 @@
 # Version 1.2.6
 
+* Updating fast_tls to version 1.1.16.
 * Increase receive timeout
 
 # Version 1.2.5
