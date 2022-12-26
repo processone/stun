@@ -788,9 +788,9 @@ is_tls_handshake({_, _, {_, Socket}}) ->
 	{ok, {_, _}} ->
 	    ?LOG_DEBUG("Determined transport protocol: TCP"),
 	    false;
-	{error, Reason} = Err ->
+	{error, Reason} ->
 	    ?LOG_INFO("Cannot determine transport protocol: ~s", [Reason]),
-	    Err
+	    false
     end.
 -endif.
 
