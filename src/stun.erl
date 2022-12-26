@@ -134,9 +134,7 @@ init([Sock, Opts]) ->
 			    {ok, session_established, NewState};
 			{error, Reason} ->
 			    {stop, Reason}
-		    end;
-		{error, Reason} ->
-		    {stop, Reason}
+		    end
 	    end;
 	{error, Reason} ->
 	    {stop, Reason}
@@ -760,9 +758,7 @@ get_sockmod(Opts, Sock) ->
 		true ->
 		    {ok, fast_tls};
 		false ->
-		    {ok, gen_tcp};
-		{error, _Reason} = Err ->
-		    Err
+		    {ok, gen_tcp}
 	    end
     end.
 
