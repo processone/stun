@@ -1,3 +1,8 @@
+# Version 1.2.7
+
+* Handle transport autodetection error gracefully
+* Remove unused error handling
+
 # Version 1.2.6
 
 * Updating fast_tls to version 1.1.16.
