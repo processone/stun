@@ -5,7 +5,7 @@
 %%% Created : 19 Jul 2020 by Holger Weiss <holger@zedat.fu-berlin.de>
 %%%
 %%%
-%%% Copyright (C) 2020-2022 ProcessOne, SARL. All Rights Reserved.
+%%% Copyright (C) 2020-2023 ProcessOne, SARL. All Rights Reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
