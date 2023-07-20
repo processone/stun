@@ -691,7 +691,7 @@ clean_treap(Treap, CleanPriority) ->
 make_nonce(Addr, Nonces) ->
     Priority = now_priority(),
     {TS, _} = Priority,
-    Nonce = list_to_binary(integer_to_list(rand_uniform(1 bsl 32))),
+    Nonce = integer_to_binary(rand_uniform(1 bsl 32)),
     NewNonces = clean_treap(Nonces, TS + ?NONCE_LIFETIME),
     {Nonce, treap:insert(Nonce, Priority, Addr, NewNonces)}.
 
