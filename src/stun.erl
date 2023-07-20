@@ -681,7 +681,7 @@ clean_treap(Treap, CleanPriority) ->
 	    Treap;
 	false ->
 	    {_Key, {TS, _}, _Value} = treap:get_root(Treap),
-	    if TS > CleanPriority ->
+	    if TS < CleanPriority ->
 		    clean_treap(treap:delete_root(Treap), CleanPriority);
 	       true ->
 		    Treap
@@ -692,12 +692,12 @@ make_nonce(Addr, Nonces) ->
     Priority = now_priority(),
     {TS, _} = Priority,
     Nonce = integer_to_binary(rand_uniform(1 bsl 32)),
-    NewNonces = clean_treap(Nonces, TS + ?NONCE_LIFETIME),
+    NewNonces = clean_treap(Nonces, TS - ?NONCE_LIFETIME),
     {Nonce, treap:insert(Nonce, Priority, Addr, NewNonces)}.
 
 have_nonce(Nonce, Nonces) ->
     TS = p1_time_compat:monotonic_time(micro_seconds),
-    NewNonces = clean_treap(Nonces, TS + ?NONCE_LIFETIME),
+    NewNonces = clean_treap(Nonces, TS - ?NONCE_LIFETIME),
     case treap:lookup(Nonce, NewNonces) of
 	{ok, _, _} ->
 	    {true, NewNonces};

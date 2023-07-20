@@ -1,3 +1,7 @@
+# Version 1.2.8
+
+* Fix expiry of nonces.
+
 # Version 1.2.7
 
 * Handle transport autodetection error gracefully
