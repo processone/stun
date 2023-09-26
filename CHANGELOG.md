@@ -1,3 +1,7 @@
+# Version 1.2.9
+
+* Allow for specifying white/blacklists for clients and peers separately.
+
 # Version 1.2.8
 
 * Fix expiry of nonces.

@@ -83,8 +83,10 @@
 	 last_pkt = <<>>                   :: binary(),
 	 seq = 1                           :: non_neg_integer(),
 	 life_timer                        :: reference() | undefined,
-	 blacklist = []                    :: accesslist(),
-	 whitelist = []                    :: accesslist(),
+	 blacklist_clients = []            :: accesslist(),
+	 whitelist_clients = []            :: accesslist(),
+	 blacklist_peers = []              :: accesslist(),
+	 whitelist_peers = []              :: accesslist(),
 	 hook_fun                          :: function() | undefined,
 	 session_id                        :: binary(),
 	 rcvd_bytes = 0                    :: non_neg_integer(),
@@ -120,8 +122,10 @@ init([Opts]) ->
     AddrPort = proplists:get_value(addr, Opts),
     SockMod = proplists:get_value(sock_mod, Opts),
     HookFun = proplists:get_value(hook_fun, Opts),
-    Blacklist = proplists:get_value(blacklist, Opts) ++ ?INITIAL_BLACKLIST,
-    Whitelist = proplists:get_value(whitelist, Opts),
+    BlacklistClients = proplists:get_value(blacklist_clients, Opts),
+    WhitelistClients = proplists:get_value(whitelist_clients, Opts),
+    BlacklistPeers = proplists:get_value(blacklist_peers, Opts),
+    WhitelistPeers = proplists:get_value(whitelist_peers, Opts),
     State = #state{sock_mod = SockMod,
 		   sock = proplists:get_value(sock, Opts),
 		   key = proplists:get_value(key, Opts),
@@ -133,7 +137,10 @@ init([Opts]) ->
 		   server_name = proplists:get_value(server_name, Opts),
 		   username = Username, realm = Realm, addr = AddrPort,
 		   session_id = ID, owner = Owner, hook_fun = HookFun,
-		   blacklist = Blacklist, whitelist = Whitelist},
+		   blacklist_clients = BlacklistClients ++ ?INITIAL_BLACKLIST,
+		   whitelist_clients = WhitelistClients,
+		   blacklist_peers = BlacklistPeers ++ ?INITIAL_BLACKLIST,
+		   whitelist_peers = WhitelistPeers},
     stun_logger:set_metadata(turn, SockMod, ID, AddrPort, Username),
     MaxAllocs = proplists:get_value(max_allocs, Opts),
     if is_pid(Owner) ->
@@ -162,7 +169,7 @@ wait_for_allocate(#stun{class = request,
 		 undefined -> inet;
 		 unknown -> unknown
 	     end,
-    IsBlacklisted = blacklisted(State),
+    IsBlacklisted = is_blacklisted_client(State),
     Resp = prepare_response(State, Msg),
     if Msg#stun.'REQUESTED-TRANSPORT' == undefined ->
 	    ?LOG_NOTICE("Rejecting allocation request: no transport requested"),
@@ -498,7 +505,7 @@ update_permissions(#state{permissions = Perms, max_permissions = Max}, Addrs)
   when map_size(Perms) + length(Addrs) > Max ->
     {error, 508};
 update_permissions(#state{relay_addr = {IP, _}} = State, Addrs) ->
-    case {families_match(IP, Addrs), blacklisted(State, Addrs)} of
+    case {families_match(IP, Addrs), is_blacklisted_peer(State, Addrs)} of
 	{true, false} ->
 	    Perms = lists:foldl(
 		      fun(Addr, Acc) ->
@@ -603,10 +610,16 @@ family_matches({_, _, _, _, _, _, _, _}, {_, _, _, _, _, _, _, _}) ->
 family_matches(_Addr1, _Addr2) ->
     false.
 
-blacklisted(#state{addr = {IP, _Port}} = State) ->
-    blacklisted(State, [IP]).
+is_blacklisted_client(#state{addr = {IP, _Port},
+			     blacklist_clients = Blacklist,
+			     whitelist_clients = Whitelist}) ->
+    is_blacklisted(Blacklist, Whitelist, [IP]).
 
-blacklisted(#state{blacklist = Blacklist, whitelist = Whitelist}, IPs) ->
+is_blacklisted_peer(#state{blacklist_peers = Blacklist,
+			   whitelist_peers = Whitelist}, IPs) ->
+    is_blacklisted(Blacklist, Whitelist, IPs).
+
+is_blacklisted(Blacklist, Whitelist, IPs) ->
     lists:any(
       fun(IP) ->
 	      lists:any(

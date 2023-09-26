@@ -73,8 +73,10 @@
 	 max_allocs = 10             :: non_neg_integer() | infinity,
 	 shaper = none               :: stun_shaper:shaper(),
 	 max_permissions = 10        :: non_neg_integer() | infinity,
-	 blacklist = []              :: turn:accesslist(),
-	 whitelist = []              :: turn:accesslist(),
+	 blacklist_clients = []      :: turn:accesslist(),
+	 whitelist_clients = []      :: turn:accesslist(),
+	 blacklist_peers = []        :: turn:accesslist(),
+	 whitelist_peers = []        :: turn:accesslist(),
 	 auth = user                 :: anonymous | user,
 	 nonces = treap:empty()      :: treap:treap(),
 	 realm = <<"">>              :: binary(),
@@ -354,8 +356,10 @@ process(State, #stun{class = request,
 		    {server_name, State#state.server_name},
 		    {max_allocs, State#state.max_allocs},
 		    {max_permissions, State#state.max_permissions},
-		    {blacklist, State#state.blacklist},
-		    {whitelist, State#state.whitelist},
+		    {blacklist_clients, State#state.blacklist_clients},
+		    {whitelist_clients, State#state.whitelist_clients},
+		    {blacklist_peers, State#state.blacklist_peers},
+		    {whitelist_peers, State#state.whitelist_peers},
 		    {addr, AddrPort},
 		    {relay_ipv4_ip, State#state.relay_ipv4_ip},
 		    {relay_ipv6_ip, State#state.relay_ipv6_ip},
@@ -550,23 +554,69 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		      ?LOG_ERROR("Wrong 'turn_max_permissions' value: ~p",
 				 [Wrong]),
 		      State;
-		 ({turn_blacklist, B}, State) ->
+		 ({turn_blacklist_clients, B},
+		  #state{blacklist_clients = B0} = State) ->
 		      case lists:all(fun is_valid_subnet/1, B) of
 			  true ->
-			      State#state{blacklist = B};
+			      State#state{blacklist_clients = B0 ++ B};
 			  false ->
-			      ?LOG_ERROR("Wrong 'turn_blacklist' value: ~p",
-					 [B]),
+			      ?LOG_ERROR("Wrong 'turn_blacklist_clients' "
+					 "value: ~p", [B]),
 			      State
 		      end;
-		 ({turn_whitelist, B}, State) ->
+		 ({turn_whitelist_clients, W},
+		  #state{whitelist_clients = W0} = State) ->
+		      case lists:all(fun is_valid_subnet/1, W) of
+			  true ->
+			      State#state{whitelist_clients = W0 ++ W};
+			  false ->
+			      ?LOG_ERROR("Wrong 'turn_whitelist_clients' "
+					 "value: ~p", [W]),
+			      State
+		      end;
+		 ({turn_blacklist_peers, B},
+		  #state{blacklist_peers = B0} = State) ->
 		      case lists:all(fun is_valid_subnet/1, B) of
 			  true ->
-			      State#state{whitelist = B};
+			      State#state{blacklist_peers = B0 ++ B};
 			  false ->
-			      ?LOG_ERROR("Wrong 'turn_whitelist' value: ~p",
-					 [B]),
+			      ?LOG_ERROR("Wrong 'turn_blacklist_peers' "
+					 "value: ~p", [B]),
 			      State
+		      end;
+		 ({turn_whitelist_peers, W},
+		  #state{whitelist_peers = W0} = State) ->
+		      case lists:all(fun is_valid_subnet/1, W) of
+			  true ->
+			      State#state{whitelist_peers = W0 ++ W};
+			  false ->
+			      ?LOG_ERROR("Wrong 'turn_whitelist_peers' "
+					 "value: ~p", [W]),
+			      State
+		      end;
+		 ({turn_blacklist, B}, #state{blacklist_clients = C,
+					      blacklist_peers = P} = State0) ->
+		      case lists:all(fun is_valid_subnet/1, B) of
+			  true ->
+			      State1 = State0#state{blacklist_clients = C ++ B},
+			      State2 = State1#state{blacklist_peers = P ++ B},
+			      State2;
+			  false ->
+			      ?LOG_ERROR("Wrong 'turn_blacklist' "
+					 "value: ~p", [B]),
+			      State0
+		      end;
+		 ({turn_whitelist, W}, #state{whitelist_clients = C,
+					      whitelist_peers = P} = State0) ->
+		      case lists:all(fun is_valid_subnet/1, W) of
+			  true ->
+			      State1 = State0#state{whitelist_clients = C ++ W},
+			      State2 = State1#state{whitelist_peers = P ++ W},
+			      State2;
+			  false ->
+			      ?LOG_ERROR("Wrong 'turn_whitelist' "
+					 "value: ~p", [W]),
+			      State0
 		      end;
 		 ({shaper, S}, State)
 		    when S == none orelse (is_integer(S) andalso (S > 0)) ->
