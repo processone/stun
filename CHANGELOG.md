@@ -1,3 +1,7 @@
+# Version 1.2.10
+
+* Avoid the UDP stack for local communication
+
 # Version 1.2.9
 
 * Allow for specifying white/blacklists for clients and peers separately.

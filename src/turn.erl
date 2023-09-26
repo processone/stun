@@ -223,6 +223,7 @@ wait_for_allocate(#stun{class = request,
 		    RelayAddr = {RelayIP, RelayPort},
 		    stun_logger:add_metadata(
 		      #{stun_relay => stun_logger:encode_addr(RelayAddr)}),
+		    turn_sm:add_relay(AddrPort, RelayAddr, self()),
 		    ?LOG_NOTICE("Creating TURN allocation "
 				"(lifetime: ~B seconds)", [Lifetime]),
 		    R = Resp#stun{class = response,
@@ -322,8 +323,7 @@ active(#stun{class = indication,
 	     'DATA' = Data}, State) when is_binary(Data) ->
     State1 = case maps:find(Addr, State#state.permissions) of
 		 {ok, _} ->
-		     gen_udp:send(State#state.relay_sock, Addr, Port, Data),
-		     count_sent(State, Data);
+		     send_peer(State, {Addr, Port}, Data);
 		 error ->
 		     State
 	     end,
@@ -392,9 +392,7 @@ active(#stun{class = request,
 active(#turn{channel = Channel, data = Data}, State) ->
     case maps:find(Channel, State#state.channels) of
 	{ok, {{Addr, Port}, _}} ->
-	    gen_udp:send(State#state.relay_sock,
-			 Addr, Port, Data),
-	    State1 = count_sent(State, Data),
+	    State1 = send_peer(State, {Addr, Port}, Data),
 	    {next_state, active, State1};
 	error ->
 	    {next_state, active, State}
@@ -561,6 +559,20 @@ send(State, Msg) ->
 	    send(State, stun_codec:encode(Msg, Key)),
 	    State
     end.
+
+send_peer(#state{relay_sock = Sock,
+		 relay_addr = {Addr, RelayPort}} = State,
+	  {Addr, PeerPort} = Peer, Data) -> % Relay and peer address are identical.
+    case turn_sm:find_relay(Peer) of
+	{ok, Pid} ->
+	    Pid ! {udp, self(), Addr, RelayPort, Data};
+	{error, notfound} ->
+	    gen_udp:send(Sock, Addr, PeerPort, Data)
+    end,
+    count_sent(State, Data);
+send_peer(#state{relay_sock = Sock} = State, {PeerAddr, PeerPort}, Data) ->
+    gen_udp:send(Sock, PeerAddr, PeerPort, Data),
+    count_sent(State, Data).
 
 time_left(TRef) ->
     erlang:read_timer(TRef) div 1000.

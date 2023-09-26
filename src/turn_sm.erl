@@ -29,7 +29,9 @@
 -export([start_link/0,
 	 start/0,
 	 find_allocation/1,
+	 find_relay/1,
 	 add_allocation/5,
+	 add_relay/3,
 	 del_allocation/3]).
 
 %% gen_server callbacks
@@ -49,23 +51,29 @@ start() ->
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-find_allocation(AddrPort) ->
-    case ets:lookup(turn_allocs, AddrPort) of
-	[{_, Pid}] ->
-	    {ok, Pid};
-	_ ->
-	    {error, notfound}
-    end.
+find_allocation(Client) ->
+    find(turn_allocs, Client).
 
-add_allocation(AddrPort, _User, _Realm, _MaxAllocs, Pid) ->
-    ets:insert(turn_allocs, {AddrPort, Pid}),
+find_relay(Relay) ->
+    find(relay_addrs, Relay).
+
+add_allocation(Client, _User, _Realm, _MaxAllocs, Pid) ->
+    ets:insert(turn_allocs, {Client, none, Pid}),
     ok.
 
-del_allocation(AddrPort, _User, _Realm) ->
-    % Catch the case where an allocation is deleted after turn_sm was terminated
-    % during shutdown.
-    try ets:delete(turn_allocs, AddrPort)
-    catch _:badarg -> ok
+add_relay(Client, Relay, Pid) ->
+    ets:insert(relay_addrs, {Relay, Client, Pid}),
+    ets:update_element(turn_allocs, Client, {2, Relay}),
+    ok.
+
+del_allocation(Client, _User, _Realm) ->
+    try
+	ets:delete(relay_addrs, ets:lookup_element(turn_allocs, Client, 2)),
+	ets:delete(turn_allocs, Client)
+    catch _:badarg ->
+	    % Catch the case where an allocation is deleted after turn_sm was
+	    % terminated during shutdown.
+	    ok
     end,
     ok.
 
@@ -74,6 +82,7 @@ del_allocation(AddrPort, _User, _Realm) ->
 %%====================================================================
 init([]) ->
     ets:new(turn_allocs, [named_table, public]),
+    ets:new(relay_addrs, [named_table, public]),
     {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->
@@ -94,3 +103,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% Internal functions
 %%--------------------------------------------------------------------
+find(Table, Key) ->
+    case ets:lookup(Table, Key) of
+	[{_, _, Pid}] ->
+	    {ok, Pid};
+	_ ->
+	    {error, notfound}
+    end.
