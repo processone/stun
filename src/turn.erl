@@ -176,13 +176,13 @@ wait_for_allocate(#stun{class = request,
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
 	    run_hook(protocol_error, State, R),
-	    {stop, normal, send(State, R)};
+	    {stop, normal, send_client(State, R)};
        Msg#stun.'REQUESTED-TRANSPORT' == unknown ->
 	    ?LOG_NOTICE("Rejecting allocation request: unsupported transport"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(442)},
 	    run_hook(protocol_error, State, R),
-	    {stop, normal, send(State, R)};
+	    {stop, normal, send_client(State, R)};
        Msg#stun.'DONT-FRAGMENT' == true ->
 	    ?LOG_NOTICE("Rejecting allocation request: dont-fragment not "
 			"supported"),
@@ -190,26 +190,26 @@ wait_for_allocate(#stun{class = request,
 			  'UNKNOWN-ATTRIBUTES' = [?STUN_ATTR_DONT_FRAGMENT],
 			  'ERROR-CODE' = stun_codec:error(420)},
 	    run_hook(protocol_error, State, R),
-	    {stop, normal, send(State, R)};
+	    {stop, normal, send_client(State, R)};
        Family == unknown ->
 	    ?LOG_NOTICE("Rejecting allocation request: unknown address family"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(440)},
 	    run_hook(protocol_error, State, R),
-	    {stop, normal, send(State, R)};
+	    {stop, normal, send_client(State, R)};
        Family == inet6, State#state.relay_ipv6_ip == undefined ->
 	    ?LOG_NOTICE("Rejecting allocation request: IPv6 not supported"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(440)},
 	    run_hook(protocol_error, State, R),
-	    {stop, normal, send(State, R)};
+	    {stop, normal, send_client(State, R)};
        IsBlacklisted ->
 	    ?LOG_NOTICE("Rejecting allocation request: Client address is "
 			"blacklisted"),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(403)},
 	    run_hook(protocol_error, State, R),
-	    {stop, normal, send(State, R)};
+	    {stop, normal, send_client(State, R)};
        true ->
 	    RelayIP = case Family of
 			  inet -> State#state.relay_ipv4_ip;
@@ -230,7 +230,7 @@ wait_for_allocate(#stun{class = request,
 				  'XOR-RELAYED-ADDRESS' = RelayAddr,
 				  'LIFETIME' = Lifetime,
 				  'XOR-MAPPED-ADDRESS' = AddrPort},
-		    NewState = send(State, R),
+		    NewState = send_client(State, R),
 		    {next_state, active,
 		     NewState#state{relay_sock = RelaySock,
 				    relay_addr = RelayAddr}};
@@ -240,7 +240,7 @@ wait_for_allocate(#stun{class = request,
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = stun_codec:error(508)},
 		    run_hook(protocol_error, State, R),
-		    {stop, normal, send(State, R)}
+		    {stop, normal, send_client(State, R)}
 	    end
     end;
 wait_for_allocate(Event, State) ->
@@ -248,7 +248,7 @@ wait_for_allocate(Event, State) ->
     {next_state, wait_for_allocate, State}.
 
 active(#stun{trid = TrID}, #state{last_trid = TrID} = State) ->
-    send(State, State#state.last_pkt),
+    send_client(State, State#state.last_pkt),
     {next_state, active, State};
 active(#stun{class = request,
 	     method = ?STUN_METHOD_ALLOCATE} = Msg, State) ->
@@ -257,7 +257,7 @@ active(#stun{class = request,
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(437)},
     run_hook(protocol_error, State, R),
-    {next_state, active, send(State, R)};
+    {next_state, active, send_client(State, R)};
 active(#stun{class = request,
 	     'REQUESTED-ADDRESS-FAMILY' = ipv4,
 	     method = ?STUN_METHOD_REFRESH} = Msg,
@@ -267,7 +267,7 @@ active(#stun{class = request,
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(443)},
     run_hook(protocol_error, State, R),
-    {next_state, active, send(State, R)};
+    {next_state, active, send_client(State, R)};
 active(#stun{class = request,
 	     'REQUESTED-ADDRESS-FAMILY' = ipv6,
 	     method = ?STUN_METHOD_REFRESH} = Msg,
@@ -277,7 +277,7 @@ active(#stun{class = request,
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(443)},
     run_hook(protocol_error, State, R),
-    {next_state, active, send(State, R)};
+    {next_state, active, send_client(State, R)};
 active(#stun{class = request,
 	     method = ?STUN_METHOD_REFRESH} = Msg, State) ->
     Resp = prepare_response(State, Msg),
@@ -285,7 +285,7 @@ active(#stun{class = request,
 	0 ->
 	    ?LOG_INFO("Client requested closing the TURN session"),
 	    R = Resp#stun{class = response, 'LIFETIME' = 0},
-	    {stop, normal, send(State, R)};
+	    {stop, normal, send_client(State, R)};
 	LifeTime ->
 	    cancel_timer(State#state.life_timer),
 	    MSecs = if LifeTime == undefined ->
@@ -298,7 +298,7 @@ active(#stun{class = request,
 	    TRef = erlang:start_timer(MSecs, self(), stop),
 	    R = Resp#stun{class = response,
 			  'LIFETIME' = (MSecs div 1000)},
-	    {next_state, active, send(State#state{life_timer = TRef}, R)}
+	    {next_state, active, send_client(State#state{life_timer = TRef}, R)}
     end;
 active(#stun{class = request,
 	     'XOR-PEER-ADDRESS' = XorPeerAddrs,
@@ -308,14 +308,14 @@ active(#stun{class = request,
     case update_permissions(State, Addrs) of
 	{ok, NewState} ->
 	    R = Resp#stun{class = response},
-	    {next_state, active, send(NewState, R)};
+	    {next_state, active, send_client(NewState, R)};
 	{error, Code} ->
 	    Err = {_, Txt} = stun_codec:error(Code),
 	    ?LOG_NOTICE("Rejecting permission creation request: ~s", [Txt]),
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = Err},
 	    run_hook(protocol_error, State, R),
-	    {next_state, active, send(State, R)}
+	    {next_state, active, send_client(State, R)}
     end;
 active(#stun{class = indication,
 	     method = ?STUN_METHOD_SEND,
@@ -342,7 +342,7 @@ active(#stun{class = request,
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
 	    run_hook(protocol_error, State, R),
-	    {next_state, active, send(State, R)};
+	    {next_state, active, send_client(State, R)};
 	{{ok, {OldPeer, _}}, _} when Peer /= OldPeer ->
 	    ?LOG_NOTICE("Rejecting channel binding request: Channel already "
 			"bound to a different peer (~s)",
@@ -350,7 +350,7 @@ active(#stun{class = request,
 	    R = Resp#stun{class = error,
 			  'ERROR-CODE' = stun_codec:error(400)},
 	    run_hook(protocol_error, State, R),
-	    {next_state, active, send(State, R)};
+	    {next_state, active, send_client(State, R)};
 	{FindResult, _} ->
 	    case update_permissions(State, [Addr]) of
 		{ok, NewState0} ->
@@ -370,14 +370,14 @@ active(#stun{class = request,
 		    ?LOG_INFO("~s TURN channel ~.16B for peer ~s",
 			      [_Op, Channel, stun_logger:encode_addr(Peer)]),
 		    R = Resp#stun{class = response},
-		    {next_state, active, send(NewState, R)};
+		    {next_state, active, send_client(NewState, R)};
 		{error, Code} ->
 		    Err = {_, Txt} = stun_codec:error(Code),
 		    ?LOG_NOTICE("Rejecting channel binding request: ~s", [Txt]),
 		    R = Resp#stun{class = error,
 				  'ERROR-CODE' = Err},
 		    run_hook(protocol_error, State, R),
-		    {next_state, active, send(State, R)}
+		    {next_state, active, send_client(State, R)}
 	    end
     end;
 active(#stun{class = request,
@@ -388,7 +388,7 @@ active(#stun{class = request,
     R = Resp#stun{class = error,
 		  'ERROR-CODE' = stun_codec:error(400)},
     run_hook(protocol_error, State, R),
-    {next_state, active, send(State, R)};
+    {next_state, active, send_client(State, R)};
 active(#turn{channel = Channel, data = Data}, State) ->
     case maps:find(Channel, State#state.channels) of
 	{ok, {{Addr, Port}, _}} ->
@@ -417,7 +417,7 @@ handle_info({udp, _Sock, Addr, Port, Data}, StateName, State) ->
 	{{ok, _}, {ok, Channel}} ->
 	    TurnMsg = #turn{channel = Channel, data = Data},
 	    State1 = count_rcvd(State, Data),
-	    {next_state, StateName, send(State1, TurnMsg)};
+	    {next_state, StateName, send_client(State1, TurnMsg)};
 	{{ok, _}, error} ->
 	    Seq = State#state.seq,
 	    Ind = #stun{class = indication,
@@ -426,7 +426,8 @@ handle_info({udp, _Sock, Addr, Port, Data}, StateName, State) ->
 			'XOR-PEER-ADDRESS' = [Peer],
 			'DATA' = Data},
 	    State1 = count_rcvd(State, Data),
-	    {next_state, StateName, send(State1#state{seq = Seq+1}, Ind)};
+	    State2 = send_client(State1#state{seq = Seq+1}, Ind),
+	    {next_state, StateName, State2};
 	{error, _} ->
 	    {next_state, StateName, State}
     end;
@@ -528,7 +529,7 @@ update_permissions(#state{relay_addr = {IP, _}} = State, Addrs) ->
 	    {error, 403}
     end.
 
-send(State, Pkt) when is_binary(Pkt) ->
+send_client(State, Pkt) when is_binary(Pkt) ->
     SockMod = State#state.sock_mod,
     Sock = State#state.sock,
     if SockMod == gen_udp ->
@@ -543,20 +544,20 @@ send(State, Pkt) when is_binary(Pkt) ->
 		    exit(normal)
 	    end
     end;
-send(State, Msg) ->
+send_client(State, Msg) ->
     ?LOG_DEBUG(#{verbatim => {"Sending:~n~s", [stun_codec:pp(Msg)]}}),
     Key = State#state.key,
     case Msg of
 	#stun{class = indication} ->
-	    send(State, stun_codec:encode(Msg)),
+	    send_client(State, stun_codec:encode(Msg)),
 	    State;
 	#stun{class = response} ->
 	    Pkt = stun_codec:encode(Msg, Key),
-	    send(State, Pkt),
+	    send_client(State, Pkt),
 	    State#state{last_trid = Msg#stun.trid,
 			last_pkt = Pkt};
 	_ ->
-	    send(State, stun_codec:encode(Msg, Key)),
+	    send_client(State, stun_codec:encode(Msg, Key)),
 	    State
     end.
 
