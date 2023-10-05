@@ -38,7 +38,7 @@
 -type udp_socket() :: gen_udp:socket().
 -type tcp_socket() :: gen_tcp:socket().
 -type transport() :: udp | tcp | tls | auto.
--type opts() :: proplist:proplist().
+-type opts() :: proplists:proplist().
 
 %% API.
 
