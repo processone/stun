@@ -566,12 +566,15 @@ send_peer(#state{relay_sock = Sock,
 	  {Addr, PeerPort} = Peer, Data) -> % Relay and peer address are identical.
     case turn_sm:find_relay(Peer) of
 	{ok, Pid} ->
+	    ?LOG_INFO("Relaying TURN packet internally"),
 	    Pid ! {udp, self(), Addr, RelayPort, Data};
 	{error, notfound} ->
+	    ?LOG_INFO("Relaying TURN packet via UDP (no process found)"),
 	    gen_udp:send(Sock, Addr, PeerPort, Data)
     end,
     count_sent(State, Data);
 send_peer(#state{relay_sock = Sock} = State, {PeerAddr, PeerPort}, Data) ->
+    ?LOG_INFO("Relaying TURN packet via UDP (src/dst addresses don't match)"),
     gen_udp:send(Sock, PeerAddr, PeerPort, Data),
     count_sent(State, Data).
 
