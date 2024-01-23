@@ -1,3 +1,7 @@
+# Version 1.2.11
+
+* Updating fast_tls to version 1.1.18.
+
 # Version 1.2.10
 
 * Improve dialyzer support
