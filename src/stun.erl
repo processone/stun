@@ -82,7 +82,7 @@
 	 realm = <<"">>              :: binary(),
 	 auth_fun                    :: function() | undefined,
 	 hook_fun                    :: function() | undefined,
-	 server_name = ?SERVER_NAME  :: binary() | none,
+	 server_name = ?SERVER_NAME  :: binary() | undefined,
 	 buf = <<>>                  :: binary(),
 	 session_id                  :: binary() | undefined}).
 
