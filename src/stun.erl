@@ -82,7 +82,7 @@
 	 realm = <<"">>              :: binary(),
 	 auth_fun                    :: function() | undefined,
 	 hook_fun                    :: function() | undefined,
-	 server_name = ?SERVER_NAME  :: binary(),
+	 server_name = ?SERVER_NAME  :: binary() | none,
 	 buf = <<>>                  :: binary(),
 	 session_id                  :: binary() | undefined}).
 
@@ -624,6 +624,8 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 ({shaper, Wrong}, State) ->
 		      ?LOG_ERROR("Wrong 'shaper' value: ~p", [Wrong]),
 		      State;
+		 ({server_name, none}, State) ->
+		      State#state{server_name = undefined};
 		 ({server_name, S}, State) ->
 		      try
 			  State#state{server_name = iolist_to_binary(S)}
