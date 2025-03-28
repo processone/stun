@@ -86,6 +86,37 @@
 	 buf = <<>>                  :: binary(),
 	 session_id                  :: binary() | undefined}).
 
+-define(opt_map,
+	[{turn_ipv4_address, #state.relay_ipv4_ip, fun prepare_addr/1},
+	 {turn_ipv6_address, #state.relay_ipv6_ip, fun prepare_addr/1},
+	 {turn_min_port, #state.min_port, none},
+	 {turn_max_port, #state.max_port, none},
+	 {turn_max_allocations, #state.max_allocs, none},
+	 {turn_max_permissions, #state.max_permissions, none},
+	 {turn_blacklist_clients, #state.blacklist_clients, none},
+	 {turn_whitelist_clients, #state.whitelist_clients, none},
+	 {turn_blacklist_peers, #state.blacklist_peers, none},
+	 {turn_whitelist_peers, #state.whitelist_peers, none},
+	 {turn_blacklist, #state.blacklist_peers, none}, % Deprecated.
+	 {turn_whitelist, #state.whitelist_peers, none}, % Deprecated.
+	 {use_turn, #state.use_turn, none},
+	 {auth_type, #state.auth, none},
+	 {auth_realm, #state.realm, none},
+	 {auth_fun, #state.auth_fun, none},
+	 {hook_fun, #state.hook_fun, none},
+	 {shaper, #state.shaper, none},
+	 {inet, none, none},
+	 {ip, none, none},
+	 {backlog, none, none},
+	 {certfile, none, none},
+	 {dhfile, none, none},
+	 {ciphers, none, none},
+	 {protocol_options, none, none},
+	 {tls, none, none},
+	 {proxy_protocol, none, none},
+	 {sock_peer_name, none, none},
+	 {session_id, none, none}]).
+
 %%====================================================================
 %% API
 %%====================================================================
@@ -489,201 +520,25 @@ route_on_turn(State, Msg, Pass) ->
     end.
 
 prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
-    ID = case proplists:get_value(session_id, Opts) of
-	     ID0 when is_binary(ID0) ->
-		 ID0; % Stick to listener's session ID.
-	     undefined ->
-		 stun_logger:make_id()
-	 end,
+    ID = get_session_id(Opts),
+    Auth = get_default_auth(Opts),
+    State = #state{session_id = ID,
+		   auth = Auth,
+		   peer = Peer,
+		   sock = Sock,
+		   sock_mod = SockMod},
     stun_logger:set_metadata(stun, SockMod, ID, Peer),
-    ServerName = case proplists:get_value(server_name, Opts) of
-		     ServerName0 when is_binary(ServerName0) ->
-			 ServerName0;
-		     none ->
-			 undefined;
-		     undefined ->
-			 ?SERVER_NAME
-		 end,
-    case proplists:get_bool(use_turn, Opts) of
-	true ->
-	    lists:foldl(
-	      fun({turn_ip, IP}, State) ->
-		      case prepare_addr(IP) of
-			  {ok, Addr} ->
-			      ?LOG_WARNING("'turn_ip' is deprecated, specify "
-					   "'turn_ipv4_address' and optionally "
-					   "'turn_ipv6_address' instead"),
-			      State#state{relay_ipv4_ip = Addr};
-			  {error, _} ->
-			      ?LOG_ERROR("Wrong 'turn_ip' value: ~p", [IP]),
-			      State
-		      end;
-		 ({turn_ipv4_address, IP}, State) ->
-		      case prepare_addr(IP) of
-			  {ok, Addr} ->
-			      State#state{relay_ipv4_ip = Addr};
-			  {error, _} ->
-			      ?LOG_ERROR("Wrong 'turn_ipv4_address' value: ~p",
-					 [IP]),
-			      State
-		      end;
-		 ({turn_ipv6_address, IP}, State) ->
-		      case prepare_addr(IP) of
-			  {ok, Addr} ->
-			      State#state{relay_ipv6_ip = Addr};
-			  {error, _} ->
-			      ?LOG_ERROR("Wrong 'turn_ipv6_address' value: ~p",
-					 [IP]),
-			      State
-		      end;
-		 ({turn_min_port, Min}, State)
-		    when is_integer(Min), Min > 1024, Min < 65536 ->
-		      State#state{min_port = Min};
-		 ({turn_min_port, Wrong}, State) ->
-		      ?LOG_ERROR("Wrong 'turn_min_port' value: ~p", [Wrong]),
-		      State;
-		 ({turn_max_port, Max}, State)
-		    when is_integer(Max), Max > 1024, Max < 65536 ->
-		      State#state{max_port = Max};
-		 ({turn_max_port, Wrong}, State) ->
-		      ?LOG_ERROR("Wrong 'turn_max_port' value: ~p", [Wrong]),
-		      State;
-		 ({turn_max_allocations, N}, State)
-		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
-		      State#state{max_allocs = N};
-		 ({turn_max_allocations, Wrong}, State) ->
-		      ?LOG_ERROR("Wrong 'turn_max_allocations' value: ~p",
-				 [Wrong]),
-		      State;
-		 ({turn_max_permissions, N}, State)
-		    when (is_integer(N) andalso N > 0) orelse is_atom(N) ->
-		      State#state{max_permissions = N};
-		 ({turn_max_permissions, Wrong}, State) ->
-		      ?LOG_ERROR("Wrong 'turn_max_permissions' value: ~p",
-				 [Wrong]),
-		      State;
-		 ({turn_blacklist_clients, B},
-		  #state{blacklist_clients = B0} = State) ->
-		      case lists:all(fun is_valid_subnet/1, B) of
-			  true ->
-			      State#state{blacklist_clients = B0 ++ B};
-			  false ->
-			      ?LOG_ERROR("Wrong 'turn_blacklist_clients' "
-					 "value: ~p", [B]),
-			      State
-		      end;
-		 ({turn_whitelist_clients, W},
-		  #state{whitelist_clients = W0} = State) ->
-		      case lists:all(fun is_valid_subnet/1, W) of
-			  true ->
-			      State#state{whitelist_clients = W0 ++ W};
-			  false ->
-			      ?LOG_ERROR("Wrong 'turn_whitelist_clients' "
-					 "value: ~p", [W]),
-			      State
-		      end;
-		 ({turn_blacklist_peers, B},
-		  #state{blacklist_peers = B0} = State) ->
-		      case lists:all(fun is_valid_subnet/1, B) of
-			  true ->
-			      State#state{blacklist_peers = B0 ++ B};
-			  false ->
-			      ?LOG_ERROR("Wrong 'turn_blacklist_peers' "
-					 "value: ~p", [B]),
-			      State
-		      end;
-		 ({turn_whitelist_peers, W},
-		  #state{whitelist_peers = W0} = State) ->
-		      case lists:all(fun is_valid_subnet/1, W) of
-			  true ->
-			      State#state{whitelist_peers = W0 ++ W};
-			  false ->
-			      ?LOG_ERROR("Wrong 'turn_whitelist_peers' "
-					 "value: ~p", [W]),
-			      State
-		      end;
-		 ({turn_blacklist, B}, #state{blacklist_clients = C,
-					      blacklist_peers = P} = State0) ->
-		      case lists:all(fun is_valid_subnet/1, B) of
-			  true ->
-			      State1 = State0#state{blacklist_clients = C ++ B},
-			      State2 = State1#state{blacklist_peers = P ++ B},
-			      State2;
-			  false ->
-			      ?LOG_ERROR("Wrong 'turn_blacklist' "
-					 "value: ~p", [B]),
-			      State0
-		      end;
-		 ({turn_whitelist, W}, #state{whitelist_clients = C,
-					      whitelist_peers = P} = State0) ->
-		      case lists:all(fun is_valid_subnet/1, W) of
-			  true ->
-			      State1 = State0#state{whitelist_clients = C ++ W},
-			      State2 = State1#state{whitelist_peers = P ++ W},
-			      State2;
-			  false ->
-			      ?LOG_ERROR("Wrong 'turn_whitelist' "
-					 "value: ~p", [W]),
-			      State0
-		      end;
-		 ({shaper, S}, State)
-		    when S == none orelse (is_integer(S) andalso (S > 0)) ->
-		      State#state{shaper = stun_shaper:new(S)};
-		 ({shaper, Wrong}, State) ->
-		      ?LOG_ERROR("Wrong 'shaper' value: ~p", [Wrong]),
-		      State;
-		 ({auth_realm, R}, State) ->
-		      try
-			  State#state{realm = iolist_to_binary(R)}
-		      catch _:_ ->
-			      ?LOG_ERROR("Wrong 'auth_realm' value: ~p", [R]),
-			      State
-		      end;
-		 ({auth_fun, F}, State) when is_function(F) ->
-		      State#state{auth_fun = F};
-		 ({auth_fun, Wrong}, State) ->
-		      ?LOG_ERROR("Wrong 'auth_fun' value: ~p", [Wrong]),
-		      State;
-		 ({hook_fun, F}, State) when is_function(F) ->
-		      State#state{hook_fun = F};
-		 ({hook_fun, Wrong}, State) ->
-		      ?LOG_ERROR("Wrong 'hook_fun' value: ~p", [Wrong]),
-		      State;
-		 ({auth_type, anonymous}, State) ->
-		      State#state{auth = anonymous};
-		 ({auth_type, user}, State) ->
-		      State#state{auth = user};
-		 ({auth_type, Wrong}, State) ->
-		      ?LOG_ERROR("Wrong 'auth_type' value: ~p", [Wrong]),
-		      State;
-		 ({use_turn, _}, State) -> State;
-		 (use_turn, State) -> State;
-		 (inet, State) -> State;
-		 ({ip, _}, State) -> State;
-		 ({backlog, _}, State) -> State;
-		 ({certfile, _}, State) -> State;
-		 ({dhfile, _}, State) -> State;
-		 ({ciphers, _}, State) -> State;
-		 ({protocol_options, _}, State) -> State;
-		 ({tls, _}, State) -> State;
-		 (tls, State) -> State;
-		 ({proxy_protocol, _}, State) -> State;
-		 (proxy_protocol, State) -> State;
-		 ({sock_peer_name, _}, State) -> State;
-		 ({session_id, _}, State) -> State;
-		 (Opt, State) ->
-		      ?LOG_ERROR("Ignoring unknown option '~p'", [Opt]),
-		      State
-	      end,
-	      #state{session_id = ID, peer = Peer, sock = Sock,
-		     sock_mod = SockMod, use_turn = true,
-		     server_name = ServerName},
-	      Opts);
-	_ ->
-	    #state{session_id = ID, sock = Sock, sock_mod = SockMod,
-		   peer = Peer, hook_fun = proplists:get_value(hook_fun, Opts),
-		   auth = anonymous, server_name = ServerName}
-    end;
+    lists:foldl(
+      fun({Key, Val}, Acc) ->
+	      case lists:keyfind(Key, 1, ?opt_map) of
+		  {Key, none, none} ->
+		      Acc;
+		  {Key, Pos, none} ->
+		      setelement(Pos, Acc, Val);
+		  {Key, Pos, Fun} ->
+		      setelement(Pos, Acc, Fun(Val))
+	      end
+      end, State, proplists:unfold(Opts));
 prepare_state(State, _Sock, Peer, SockMod) ->
     ID = stun_logger:make_id(),
     stun_logger:set_metadata(stun, SockMod, ID, Peer),
@@ -698,6 +553,22 @@ prepare_addr(T) when is_tuple(T) ->
 	inet_parse:address(inet_parse:ntoa(T))
     catch _:_ ->
 	    {error, einval}
+    end.
+
+get_default_auth(Opts) ->
+    case proplists:get_bool(use_turn, Opts) of
+	true ->
+	    user;
+	false ->
+	    anonymous
+    end.
+
+get_session_id(Opts) ->
+    case proplists:get_value(session_id, Opts) of
+	ID when is_binary(ID) ->
+	    ID; % Stick to listener's session ID.
+	undefined ->
+	    stun_logger:make_id()
     end.
 
 activate_socket(#state{sock = Sock, sock_mod = gen_tcp, shaper = none}) ->
@@ -779,25 +650,6 @@ unmap_v4_addr({{0, 0, 0, 0, 0, 16#FFFF, D7, D8}, Port}) ->
     {{D7 bsr 8, D7 band 255, D8 bsr 8, D8 band 255}, Port};
 unmap_v4_addr(AddrPort) ->
     AddrPort.
-
-is_valid_subnet({{IP1, IP2, IP3, IP4}, Mask}) ->
-    (IP1 >= 0) and (IP1 =< 255) and
-    (IP2 >= 0) and (IP2 =< 255) and
-    (IP3 >= 0) and (IP3 =< 255) and
-    (IP4 >= 0) and (IP4 =< 255) and
-    (Mask >= 0) and (Mask =< 32);
-is_valid_subnet({{IP1, IP2, IP3, IP4, IP5, IP6, IP7, IP8}, Mask}) ->
-    (IP1 >= 0) and (IP1 =< 65535) and
-    (IP2 >= 0) and (IP2 =< 65535) and
-    (IP3 >= 0) and (IP3 =< 65535) and
-    (IP4 >= 0) and (IP4 =< 65535) and
-    (IP5 >= 0) and (IP5 =< 65535) and
-    (IP6 >= 0) and (IP6 =< 65535) and
-    (IP7 >= 0) and (IP7 =< 65535) and
-    (IP8 >= 0) and (IP8 =< 65535) and
-    (Mask >= 0) and (Mask =< 128);
-is_valid_subnet(_) ->
-    false.
 
 get_sockmod(Opts, Sock) ->
     case proplists:get_value(tls, Opts, false) of
