@@ -82,7 +82,7 @@
 	 realm = <<"">>              :: binary(),
 	 auth_fun                    :: function() | undefined,
 	 hook_fun                    :: function() | undefined,
-	 server_name = ?SERVER_NAME  :: binary() | undefined,
+	 server_name                 :: binary() | undefined,
 	 buf = <<>>                  :: binary(),
 	 session_id                  :: binary() | undefined}).
 
@@ -496,6 +496,14 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 stun_logger:make_id()
 	 end,
     stun_logger:set_metadata(stun, SockMod, ID, Peer),
+    ServerName = case proplists:get_value(server_name, Opts) of
+		     ServerName0 when is_binary(ServerName0) ->
+			 ServerName0;
+		     none ->
+			 undefined;
+		     undefined ->
+			 ?SERVER_NAME
+		 end,
     case proplists:get_bool(use_turn, Opts) of
 	true ->
 	    lists:foldl(
@@ -624,15 +632,6 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		 ({shaper, Wrong}, State) ->
 		      ?LOG_ERROR("Wrong 'shaper' value: ~p", [Wrong]),
 		      State;
-		 ({server_name, none}, State) ->
-		      State#state{server_name = undefined};
-		 ({server_name, S}, State) ->
-		      try
-			  State#state{server_name = iolist_to_binary(S)}
-		      catch _:_ ->
-			      ?LOG_ERROR("Wrong 'server_name' value: ~p", [S]),
-			      State
-		      end;
 		 ({auth_realm, R}, State) ->
 		      try
 			  State#state{realm = iolist_to_binary(R)}
@@ -677,12 +676,13 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		      State
 	      end,
 	      #state{session_id = ID, peer = Peer, sock = Sock,
-		     sock_mod = SockMod, use_turn = true},
+		     sock_mod = SockMod, use_turn = true,
+		     server_name = ServerName},
 	      Opts);
 	_ ->
 	    #state{session_id = ID, sock = Sock, sock_mod = SockMod,
 		   peer = Peer, hook_fun = proplists:get_value(hook_fun, Opts),
-		   auth = anonymous}
+		   auth = anonymous, server_name = ServerName}
     end;
 prepare_state(State, _Sock, Peer, SockMod) ->
     ID = stun_logger:make_id(),
