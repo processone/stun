@@ -1,3 +1,8 @@
+# Version 1.2.19
+
+* Fix handling of some configuration options.
+* Exit with a proper error on unknown options.
+
 # Version 1.2.18
 
 * Support custom SOFTWARE attribute for STUN responses as well.
