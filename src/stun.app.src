@@ -23,7 +23,7 @@
 
 {application, stun,
  [{description,  "STUN and TURN library for Erlang / Elixir"},
-  {vsn,          "1.2.18"},
+  {vsn,          "1.2.19"},
   {modules,      []},
   {registered,   []},
   {applications, [kernel, stdlib, fast_tls, p1_utils]},
