@@ -1,4 +1,15 @@
-* Fix types specification
+# Version 1.2.18
+
+* Support custom SOFTWARE attribute for STUN responses as well.
+* Leave option validation to calling application.
+
+# Version 1.2.17
+
+* Fix type specification.
+
+# Version 1.2.16
+
+* Support omitting the SOFTWARE attribute.
 
 # Version 1.2.15
 
