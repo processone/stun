@@ -87,36 +87,36 @@
 	 session_id                  :: binary() | undefined}).
 
 -define(opt_map,
-	[{shaper, #state.shaper, fun stun_shaper:new/1},
-	 {turn_ipv4_address, #state.relay_ipv4_ip, none},
-	 {turn_ipv6_address, #state.relay_ipv6_ip, none},
-	 {turn_min_port, #state.min_port, none},
-	 {turn_max_port, #state.max_port, none},
-	 {turn_max_allocations, #state.max_allocs, none},
-	 {turn_max_permissions, #state.max_permissions, none},
-	 {turn_blacklist_clients, #state.blacklist_clients, none},
-	 {turn_whitelist_clients, #state.whitelist_clients, none},
-	 {turn_blacklist_peers, #state.blacklist_peers, none},
-	 {turn_whitelist_peers, #state.whitelist_peers, none},
-	 {turn_blacklist, #state.blacklist_peers, none}, % Deprecated.
-	 {turn_whitelist, #state.whitelist_peers, none}, % Deprecated.
-	 {use_turn, #state.use_turn, none},
-	 {auth_type, #state.auth, none},
-	 {auth_realm, #state.realm, none},
-	 {auth_fun, #state.auth_fun, none},
-	 {hook_fun, #state.hook_fun, none},
-	 {server_name, #state.server_name, none},
-	 {inet, none, none},
-	 {ip, none, none},
-	 {backlog, none, none},
-	 {certfile, none, none},
-	 {dhfile, none, none},
-	 {ciphers, none, none},
-	 {protocol_options, none, none},
-	 {tls, none, none},
-	 {proxy_protocol, none, none},
-	 {sock_peer_name, none, none},
-	 {session_id, none, none}]).
+	[{shaper, fun handle_opt/3},
+	 {server_name, fun handle_opt/3},
+	 {turn_ipv4_address, #state.relay_ipv4_ip},
+	 {turn_ipv6_address, #state.relay_ipv6_ip},
+	 {turn_min_port, #state.min_port},
+	 {turn_max_port, #state.max_port},
+	 {turn_max_allocations, #state.max_allocs},
+	 {turn_max_permissions, #state.max_permissions},
+	 {turn_blacklist_clients, #state.blacklist_clients},
+	 {turn_whitelist_clients, #state.whitelist_clients},
+	 {turn_blacklist_peers, #state.blacklist_peers},
+	 {turn_whitelist_peers, #state.whitelist_peers},
+	 {turn_blacklist, #state.blacklist_peers}, % Deprecated.
+	 {turn_whitelist, #state.whitelist_peers}, % Deprecated.
+	 {use_turn, #state.use_turn},
+	 {auth_type, #state.auth},
+	 {auth_realm, #state.realm},
+	 {auth_fun, #state.auth_fun},
+	 {hook_fun, #state.hook_fun},
+	 {inet, none},
+	 {ip, none},
+	 {backlog, none},
+	 {certfile, none},
+	 {dhfile, none},
+	 {ciphers, none},
+	 {protocol_options, none},
+	 {tls, none},
+	 {proxy_protocol, none},
+	 {sock_peer_name, none},
+	 {session_id, none}]).
 
 %%====================================================================
 %% API
@@ -531,14 +531,14 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
     stun_logger:set_metadata(stun, SockMod, ID, Peer),
     lists:foldl(
       fun({Key, Val}, Acc) ->
-	      case lists:keyfind(Key, 1, ?opt_map) of
-		  {Key, none, none} ->
-		      Acc;
-		  {Key, Pos, none} ->
+	      case proplists:get_value(Key, ?opt_map) of
+		  Pos when is_integer(Pos) ->
 		      setelement(Pos, Acc, Val);
-		  {Key, Pos, Fun} ->
-		      setelement(Pos, Acc, Fun(Val));
-		  false ->
+		  Fun when is_function(Fun) ->
+		      Fun(Key, Val, Acc);
+		  none ->
+		      Acc;
+		  undefined ->
 		      exit({unknown_option, Key})
 	      end
       end, State, proplists:unfold(Opts));
@@ -562,6 +562,13 @@ get_session_id(Opts) ->
 	undefined ->
 	    stun_logger:make_id()
     end.
+
+handle_opt(server_name, none, State) ->
+    State#state{server_name = undefined};
+handle_opt(server_name, Name, State) ->
+    State#state{server_name = Name};
+handle_opt(shaper, Shaper, State) ->
+    State#state{shaper = stun_shaper:new(Shaper)}.
 
 activate_socket(#state{sock = Sock, sock_mod = gen_tcp, shaper = none}) ->
     inet:setopts(Sock, [{active, ?TCP_ACTIVE}]);
