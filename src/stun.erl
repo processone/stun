@@ -536,7 +536,9 @@ prepare_state(Opts, Sock, Peer, SockMod) when is_list(Opts) ->
 		  {Key, Pos, none} ->
 		      setelement(Pos, Acc, Val);
 		  {Key, Pos, Fun} ->
-		      setelement(Pos, Acc, Fun(Val))
+		      setelement(Pos, Acc, Fun(Val));
+		  false ->
+		      exit({unknown_option, Key})
 	      end
       end, State, proplists:unfold(Opts));
 prepare_state(State, _Sock, Peer, SockMod) ->
