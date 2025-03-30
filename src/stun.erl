@@ -88,8 +88,8 @@
 
 -define(opt_map,
 	[{shaper, #state.shaper, fun stun_shaper:new/1},
-	 {turn_ipv4_address, #state.relay_ipv4_ip, fun prepare_addr/1},
-	 {turn_ipv6_address, #state.relay_ipv6_ip, fun prepare_addr/1},
+	 {turn_ipv4_address, #state.relay_ipv4_ip, none},
+	 {turn_ipv6_address, #state.relay_ipv6_ip, none},
 	 {turn_min_port, #state.min_port, none},
 	 {turn_max_port, #state.max_port, none},
 	 {turn_max_allocations, #state.max_allocs, none},
@@ -546,17 +546,6 @@ prepare_state(State, _Sock, Peer, SockMod) ->
     ID = stun_logger:make_id(),
     stun_logger:set_metadata(stun, SockMod, ID, Peer),
     State#state{session_id = ID, peer = Peer}.
-
-prepare_addr(IPBin) when is_binary(IPBin) ->
-    prepare_addr(binary_to_list(IPBin));
-prepare_addr(IPS) when is_list(IPS) ->
-    inet_parse:address(IPS);
-prepare_addr(T) when is_tuple(T) ->
-    try
-	inet_parse:address(inet_parse:ntoa(T))
-    catch _:_ ->
-	    {error, einval}
-    end.
 
 get_default_auth(Opts) ->
     case proplists:get_bool(use_turn, Opts) of
