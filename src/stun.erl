@@ -87,7 +87,8 @@
 	 session_id                  :: binary() | undefined}).
 
 -define(opt_map,
-	[{turn_ipv4_address, #state.relay_ipv4_ip, fun prepare_addr/1},
+	[{shaper, #state.shaper, fun stun_shaper:new/1},
+	 {turn_ipv4_address, #state.relay_ipv4_ip, fun prepare_addr/1},
 	 {turn_ipv6_address, #state.relay_ipv6_ip, fun prepare_addr/1},
 	 {turn_min_port, #state.min_port, none},
 	 {turn_max_port, #state.max_port, none},
@@ -104,7 +105,6 @@
 	 {auth_realm, #state.realm, none},
 	 {auth_fun, #state.auth_fun, none},
 	 {hook_fun, #state.hook_fun, none},
-	 {shaper, #state.shaper, none},
 	 {server_name, #state.server_name, none},
 	 {inet, none, none},
 	 {ip, none, none},
