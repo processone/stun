@@ -369,7 +369,6 @@ process(State, #stun{class = request,
 	Secret, IsExpired) ->
     Resp = prepare_response(State, Msg),
     AddrPort = State#state.peer,
-    SockMod = State#state.sock_mod,
     case turn_sm:find_allocation(AddrPort) of
 	{ok, Pid} ->
 	    turn:route(Pid, Msg),
@@ -380,6 +379,7 @@ process(State, #stun{class = request,
 	    run_hook(protocol_error, State, R),
 	    send(State, R);
 	_ ->
+	    SockMod = State#state.sock_mod,
 	    Opts = [{sock, State#state.sock},
 		    {sock_mod, SockMod},
 		    {username, Msg#stun.'USERNAME'},
