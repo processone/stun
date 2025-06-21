@@ -59,7 +59,7 @@ set_metadata(SubDomain, Transport, ID) ->
 
 -spec set_metadata(sub_domain(), sock_mod(), binary(),
 		   {inet:ip_address(), inet:port_number()},
-		   binary() | anonymous) -> ok.
+		   binary() | undefined) -> ok.
 set_metadata(SubDomain, SockMod, ID, Addr, User) ->
     put(?MODULE, #{domain => [stun, SubDomain],
 		   stun_transport => encode_transport(SockMod),
@@ -127,7 +127,7 @@ set_metadata(SubDomain, Transport, ID) ->
 
 -spec set_metadata(sub_domain(), sock_mod(), binary(),
 		   {inet:ip_address(), inet:port_number()},
-		   binary() | anonymous) -> ok.
+		   binary() | undefined) -> ok.
 set_metadata(SubDomain, SockMod, ID, Addr, User) ->
     logger:set_process_metadata(
       #{domain => [stun, SubDomain],
@@ -163,7 +163,7 @@ filter(_Event, _Extra) ->
 -spec set_metadata(sub_domain(), sock_mod(), binary(),
 		   {inet:ip_address(), inet:port_number()}) -> ok.
 set_metadata(SubDomain, SockMod, ID, Addr) ->
-    set_metadata(SubDomain, SockMod, ID, Addr, anonymous).
+    set_metadata(SubDomain, SockMod, ID, Addr, undefined).
 
 -spec make_id() -> binary().
 make_id() ->
@@ -214,6 +214,6 @@ format_msg(Text, #{stun_transport := Transport}) ->
     {"~s [~s]",
      [Text, Transport]}.
 
--spec format_user(anonymous | iodata()) -> iodata().
-format_user(anonymous) -> <<"anonymous">>;
+-spec format_user(iodata() | undefined) -> iodata().
+format_user(undefined) -> <<"anonymous">>;
 format_user(User) -> [<<"user ">>, User].

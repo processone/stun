@@ -1,3 +1,7 @@
+# Version 1.2.20
+
+* Fix formatting of log messages for anonymous TURN sessions.
+
 # Version 1.2.19
 
 * Fix handling of some configuration options.
