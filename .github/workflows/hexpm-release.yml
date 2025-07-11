@@ -7,10 +7,16 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+
+      - name: Get Erlang/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: 26
+          rebar3-version: '3.24.0'
 
       - name: Setup rebar3 hex
         run: |
