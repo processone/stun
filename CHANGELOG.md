@@ -1,5 +1,7 @@
 # Version 1.2.20
 
+* Updating fast_tls to version 1.1.24.
+* Updating p1_utils to version 1.0.28.
 * Fix formatting of log messages for anonymous TURN sessions.
 
 # Version 1.2.19
