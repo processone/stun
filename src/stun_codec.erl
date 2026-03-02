@@ -46,13 +46,14 @@ crypto_hmac(Type, Key, Data) -> crypto:mac(hmac, Type, Key, Data).
 %%====================================================================
 decode(<<0:2, Type:14, Len:16, Magic:32, TrID:96,
 	Body:Len/binary, Tail/binary>> = Data, Transport) ->
-    case catch decode(Type, Magic, TrID, Body) of
-	{'EXIT', _} ->
-	    {error, unparsed};
+    try decode(Type, Magic, TrID, Body) of
 	{Res, RawSize} when Transport == datagram ->
 	    {ok, add_raw(Res, Data, RawSize)};
 	{Res, RawSize} ->
 	    {ok, add_raw(Res, Data, RawSize), Tail}
+    catch
+	_:_ ->
+	    {error, unparsed}
     end;
 decode(<<1:2, _:6, _/binary>> = Pkt, datagram) ->
     case Pkt of

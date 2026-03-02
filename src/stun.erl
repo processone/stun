@@ -220,7 +220,9 @@ handle_info(Info, StateName, State) ->
     {next_state, StateName, State}.
 
 terminate(_Reason, _StateName, State) ->
-    catch (State#state.sock_mod):close(State#state.sock),
+    try (State#state.sock_mod):close(State#state.sock)
+    catch _:_ -> error
+    end,
     ok.
 
 code_change(_OldVsn, StateName, State, _Extra) ->
