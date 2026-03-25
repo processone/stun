@@ -1,3 +1,7 @@
+# Version 1.2.22
+
+* Fix new deprecation in R29
+
 # Version 1.2.21
 
 * Updating fast_tls to version 1.1.25.
