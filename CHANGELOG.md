@@ -1,5 +1,7 @@
 # Version 1.2.22
 
+* Updating fast_tls to version 1.1.26.
+* Updating p1_utils to version 1.0.29.
 * Fix new deprecation in R29
 
 # Version 1.2.21
