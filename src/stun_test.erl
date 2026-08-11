@@ -283,6 +283,42 @@ allocate_udp_test() ->
     ?assertEqual(ok, gen_udp:close(PeerSocket)),
     ?assertEqual(ok, gen_udp:close(Socket)).
 
+%% Test that nonces are bound to the client's source address.
+%% A nonce obtained from one address must not be usable from another address.
+nonce_source_binding_test() ->
+    %% Socket1 obtains a nonce
+    {ok, Socket1} = gen_udp:open(0, [binary, {ip, ?STUN_IP}, {active, false}]),
+    TrID1 = mk_trid(),
+    Msg1 = #stun{method = ?STUN_METHOD_ALLOCATE,
+		 class = request,
+		 trid = TrID1},
+    PktOut1 = stun_codec:encode(Msg1),
+    ?assertEqual(ok, gen_udp:send(Socket1, ?STUN_IP, ?STUN_PORT, PktOut1)),
+    {ok, {_, _, PktIn1}} = gen_udp:recv(Socket1, 0, ?RECV_TIMEOUT),
+    {ok, #stun{trid = TrID1,
+	       class = error,
+	       'ERROR-CODE' = {401, _},
+	       'NONCE' = Nonce,
+	       'REALM' = ?REALM}} = stun_codec:decode(PktIn1, datagram),
+    %% Socket2 (different source address) tries to use the nonce from Socket1
+    {ok, Socket2} = gen_udp:open(0, [binary, {ip, ?STUN_IP}, {active, false}]),
+    TrID2 = mk_trid(),
+    Msg2 = #stun{method = ?STUN_METHOD_ALLOCATE,
+		 trid = TrID2,
+		 'REQUESTED-TRANSPORT' = udp,
+		 'NONCE' = Nonce,
+		 'REALM' = ?REALM,
+		 'USERNAME' = ?USER},
+    PktOut2 = stun_codec:encode(Msg2, {?USER, ?REALM, ?PASS}),
+    ?assertEqual(ok, gen_udp:send(Socket2, ?STUN_IP, ?STUN_PORT, PktOut2)),
+    {ok, {_, _, PktIn2}} = gen_udp:recv(Socket2, 0, ?RECV_TIMEOUT),
+    %% Must get 438 Stale Nonce because the nonce was issued for a different address
+    {ok, #stun{trid = TrID2,
+	       class = error,
+	       'ERROR-CODE' = {438, _}}} = stun_codec:decode(PktIn2, datagram),
+    ?assertEqual(ok, gen_udp:close(Socket1)),
+    ?assertEqual(ok, gen_udp:close(Socket2)).
+
 %%--------------------------------------------------------------------
 %% External functions
 %%--------------------------------------------------------------------

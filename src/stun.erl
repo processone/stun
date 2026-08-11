@@ -269,7 +269,7 @@ process(#state{auth = user} = State,
   when User /= undefined, Realm /= undefined, Nonce /= undefined ->
     stun_logger:add_metadata(#{stun_user => User}),
     Resp = prepare_response(State, Msg),
-    {HaveNonce, Nonces} = have_nonce(Nonce, State#state.nonces),
+    {HaveNonce, Nonces} = have_nonce(Nonce, State#state.nonces, State#state.peer),
     case HaveNonce of
 	true ->
 	    NewState = State#state{nonces = Nonces},
@@ -619,12 +619,15 @@ make_nonce(Addr, Nonces) ->
     NewNonces = clean_treap(Nonces, TS - ?NONCE_LIFETIME),
     {Nonce, treap:insert(Nonce, Priority, Addr, NewNonces)}.
 
-have_nonce(Nonce, Nonces) ->
+have_nonce(Nonce, Nonces, PeerAddr) ->
     TS = p1_time_compat:monotonic_time(micro_seconds),
     NewNonces = clean_treap(Nonces, TS - ?NONCE_LIFETIME),
     case treap:lookup(Nonce, NewNonces) of
-	{ok, _, _} ->
+	{ok, _, StoredAddr} when StoredAddr == PeerAddr ->
 	    {true, NewNonces};
+	{ok, _, _} ->
+	    %% Nonce was issued for a different source address, reject it
+	    {false, NewNonces};
 	_ ->
 	    {false, NewNonces}
     end.
