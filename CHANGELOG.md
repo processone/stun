@@ -1,3 +1,8 @@
+# Version 1.2.23
+
+* Fix TURN nonce reuse from different source addresses (thanks to
+  Christoph Sanders for reporting the issue).
+
 # Version 1.2.22
 
 * Updating fast_tls to version 1.1.26.
